@@ -55,6 +55,18 @@ export default function AuditLogsPage() {
     XLSX.writeFile(book, `系统操作日志_${new Date().toLocaleDateString('en-CA')}.xlsx`);
   };
 
+  const supplementaryDetails = (stored: string | null, log: AuditLog): string => {
+    const formatted = formatStoredAuditData(stored);
+    if (!formatted) return '';
+    const visibleSummary = `${log.operator} ${log.detail}`.replaceAll(' ', '');
+    return formatted.split('\n').filter((line) => {
+      const separator = line.indexOf('：');
+      if (separator < 0) return true;
+      const value = line.slice(separator + 1).trim().replaceAll(' ', '');
+      return !value || value === '无' || !visibleSummary.includes(value);
+    }).join('\n').trim();
+  };
+
   return <div className="min-h-screen bg-[#F5F6F8] pb-8">
     <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-3 py-3">
       <Link href="/profile" className="rounded-lg p-2"><ArrowLeft className="h-5 w-5" /></Link>
@@ -88,17 +100,20 @@ export default function AuditLogsPage() {
         </div>}
       </section>
       {loading ? <div className="py-16 text-center text-sm text-gray-400">加载中…</div> : logs.length === 0 ? <div className="py-16 text-center text-sm text-gray-400">暂无操作日志</div> :
-        <div className="space-y-2">{logs.map((log) => <article key={log.id} className="rounded-xl bg-white shadow-sm">
+        <div className="space-y-2">{logs.map((log) => {
+          const beforeDetails = supplementaryDetails(log.before_data, log);
+          const afterDetails = supplementaryDetails(log.after_data, log);
+          return <article key={log.id} className="rounded-xl bg-white shadow-sm">
           <button onClick={() => setExpanded(expanded === log.id ? null : log.id)} className="flex w-full items-start gap-3 p-3.5 text-left">
             <div className={`mt-0.5 rounded-lg p-2 ${log.result === 'success' ? 'bg-[#E8F0FE] text-[#1E5AA8]' : 'bg-red-50 text-red-500'}`}><ShieldCheck className="h-4 w-4"/></div>
             <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5 text-sm"><b>{log.operator}</b><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{moduleNames[log.module] || log.module}</span><span className="text-gray-500">{actionNames[log.action] || log.action}</span></div><p className="mt-1 break-words text-sm text-gray-600">{log.detail}</p><p className="mt-1 text-xs text-gray-400">{log.created_at}</p></div><ChevronDown className={`h-4 w-4 text-gray-300 transition ${expanded === log.id ? 'rotate-180' : ''}`}/>
           </button>
           {expanded === log.id && <div className="space-y-2 border-t px-4 py-3 text-xs text-gray-600">
-            {log.before_data && <div><b>修改前</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2 leading-5">{formatStoredAuditData(log.before_data)}</div></div>}
-            {log.after_data && <div><b>修改后</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2 leading-5">{formatStoredAuditData(log.after_data)}</div></div>}
+            {beforeDetails && <div><b>修改前</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2 leading-5">{beforeDetails}</div></div>}
+            {afterDetails && <div><b>修改后</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2 leading-5">{afterDetails}</div></div>}
             <div className="text-gray-400">结果：{log.result === 'success' ? '成功' : '失败'}{log.ip_address ? ` · IP：${log.ip_address}` : ''}{log.device_type ? ` · ${log.device_type}` : ''}{log.browser ? ` · ${log.browser}` : ''}</div>
           </div>}
-        </article>)}</div>}
+        </article>;})}</div>}
     </main>
   </div>;
 }

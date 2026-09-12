@@ -35,6 +35,18 @@ export async function GET(request: Request) {
   const table = scope === 'archive' ? 'audit_log_archive' : 'audit_logs';
   const rows = db.prepare(`SELECT id, project_id, action, entity_type, entity_id, detail, operator, created_at,
     operator_id, module, result, ip_address, user_agent, before_data, after_data, device_type, browser
-    FROM ${table} ${where} ORDER BY created_at DESC LIMIT 1000`).all(...values);
-  return NextResponse.json(rows);
+    FROM ${table} ${where} ORDER BY created_at DESC LIMIT 1000`).all(...values) as Array<Record<string, unknown>>;
+  // 兼容早期日志：当时参与人员保存的是 w... 内部编号，返回页面前统一替换为姓名。
+  const workers = db.prepare('SELECT id, name FROM workers').all() as Array<{ id: string; name: string }>;
+  const workerNames = new Map(workers.map((worker) => [worker.id, worker.name]));
+  const replaceWorkerIds = (value: unknown): unknown => {
+    if (typeof value !== 'string' || !value) return value;
+    return value.replace(/w\d{8,}/g, (workerId) => workerNames.get(workerId) || '已移除人员');
+  };
+  return NextResponse.json(rows.map((row) => ({
+    ...row,
+    detail: replaceWorkerIds(row.detail),
+    before_data: replaceWorkerIds(row.before_data),
+    after_data: replaceWorkerIds(row.after_data),
+  })));
 }
