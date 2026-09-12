@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# Next.js / build output
+.next/
+out/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# local environment and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# runtime data: databases, uploaded documents/photos, generated previews and session secrets
+data/
+backups/
+*.zip
+*.tar
+*.tar.gz
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# logs and process files
+*.log
+logs/
+*.pid
+.pm2/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# test and tool caches
+coverage/
+.turbo/
+.eslintcache

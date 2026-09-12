@@ -1,0 +1,90 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import * as XLSX from 'xlsx';
+import { ArrowLeft, ChevronDown, Download, Search, ShieldCheck } from 'lucide-react';
+
+interface AuditLog {
+  id: string; project_id: string | null; module: string; action: string; entity_type: string;
+  entity_id: string | null; detail: string; operator: string; result: string; ip_address: string | null;
+  user_agent: string | null; before_data: string | null; after_data: string | null; created_at: string;
+  device_type: string | null; browser: string | null;
+}
+
+interface AuditSummary { failed24h: number; loginFailed30m: number; deletes24h: number; riskLevel: 'normal' | 'medium' | 'high' }
+
+const moduleNames: Record<string, string> = { auth: '账号登录', accounts: '账号管理', reports: '施工报工', attendance: '考勤管理', projects: '项目管理', workers: '人员管理', bom: '工程量清单', locations: '桩号管理', documents: '资料库', systems: '子系统管理', system: '系统' };
+const actionNames: Record<string, string> = { create: '新增', update: '修改', delete: '删除', login: '登录', logout: '退出', login_failed: '登录失败', blocked_login: '拦截登录', block_ip: '封禁IP', unblock_ip: '解除IP', review: '审核', import: '导入', upload: '上传', manual_update: '人工修正' };
+
+export default function AuditLogsPage() {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [module, setModule] = useState('');
+  const [action, setAction] = useState('');
+  const [result, setResult] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
+  const [keyword, setKeyword] = useState('');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [scope, setScope] = useState<'current' | 'archive'>('current');
+  const [summary, setSummary] = useState<AuditSummary | null>(null);
+
+  const query = useMemo(() => new URLSearchParams({ scope, ...(module && { module }), ...(action && { action }), ...(result && { result }), ...(projectId && { projectId }), ...(keyword && { keyword }), ...(start && { start }), ...(end && { end }) }).toString(), [action, end, keyword, module, projectId, result, scope, start]);
+  const load = async () => {
+    setLoading(true);
+    try { const response = await fetch(`/api/audit-logs?${query}`); const data: unknown = await response.json(); setLogs(Array.isArray(data) ? data as AuditLog[] : []); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, [query]);
+  useEffect(() => { fetch('/api/projects').then((response) => response.json()).then((data: unknown) => setProjects(Array.isArray(data) ? data as Array<{ id: string; name: string }> : [])).catch(() => setProjects([])); }, []);
+  useEffect(() => { fetch('/api/audit-logs?summary=1').then((response) => response.json()).then((data: AuditSummary) => setSummary(data)).catch(() => setSummary(null)); }, []);
+
+  const exportLogs = () => {
+    const rows = logs.map((log) => ({ 时间: log.created_at, 操作人: log.operator, 模块: moduleNames[log.module] || log.module,
+      操作: actionNames[log.action] || log.action, 对象: log.entity_type, 摘要: log.detail,
+      结果: log.result === 'success' ? '成功' : '失败', IP: log.ip_address || '' }));
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), '操作日志');
+    XLSX.writeFile(book, `系统操作日志_${new Date().toLocaleDateString('en-CA')}.xlsx`);
+  };
+
+  return <div className="min-h-screen bg-[#F5F6F8] pb-8">
+    <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-3 py-3">
+      <Link href="/profile" className="rounded-lg p-2"><ArrowLeft className="h-5 w-5" /></Link>
+      <div className="flex-1"><h1 className="font-semibold">系统操作日志</h1><p className="text-xs text-gray-400">重要数据操作与修改记录</p></div>
+      <button onClick={exportLogs} className="flex items-center gap-1 rounded-lg bg-[#1E5AA8] px-3 py-2 text-xs text-white"><Download className="h-3.5 w-3.5" />导出</button>
+    </header>
+    <main className="mx-auto max-w-5xl space-y-3 p-4">
+      {summary && <section className={`rounded-xl border p-3 ${summary.riskLevel === 'high' ? 'border-red-200 bg-red-50' : summary.riskLevel === 'medium' ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
+        <div className="text-sm font-semibold">安全与异常提醒</div>
+        <div className="mt-2 grid grid-cols-3 gap-2 text-center"><div><b className="text-lg">{summary.failed24h}</b><p className="text-[11px] text-gray-500">24小时失败</p></div><div><b className="text-lg">{summary.loginFailed30m}</b><p className="text-[11px] text-gray-500">30分钟登录失败</p></div><div><b className="text-lg">{summary.deletes24h}</b><p className="text-[11px] text-gray-500">24小时删除</p></div></div>
+        {summary.riskLevel !== 'normal' && <p className="mt-2 text-xs text-gray-600">检测到较多失败或删除操作，请结合下方日志确认是否正常。</p>}
+      </section>}
+      <div className="grid grid-cols-2 rounded-xl bg-gray-200 p-1 text-sm"><button onClick={() => setScope('current')} className={`rounded-lg py-2 ${scope === 'current' ? 'bg-white font-medium text-[#1E5AA8] shadow-sm' : 'text-gray-500'}`}>近一年日志</button><button onClick={() => setScope('archive')} className={`rounded-lg py-2 ${scope === 'archive' ? 'bg-white font-medium text-[#1E5AA8] shadow-sm' : 'text-gray-500'}`}>历史归档</button></div>
+      <section className="grid grid-cols-2 gap-2 rounded-xl bg-white p-3 shadow-sm md:grid-cols-4">
+        <div className="relative col-span-2 md:col-span-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索人员、对象或摘要" className="h-9 w-full rounded-lg border pl-9 pr-2 text-sm"/></div>
+        <select value={projectId} onChange={(event) => setProjectId(event.target.value)} className="h-9 rounded-lg border px-2 text-sm"><option value="">全部项目</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
+        <select value={module} onChange={(event) => setModule(event.target.value)} className="h-9 rounded-lg border px-2 text-sm"><option value="">全部模块</option>{Object.entries(moduleNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select>
+        <select value={action} onChange={(event) => setAction(event.target.value)} className="h-9 rounded-lg border px-2 text-sm"><option value="">全部操作</option>{Object.entries(actionNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select>
+        <select value={result} onChange={(event) => setResult(event.target.value)} className="h-9 rounded-lg border px-2 text-sm"><option value="">全部结果</option><option value="success">成功</option><option value="failure">失败</option></select>
+        <input type="date" value={start} onChange={(event) => setStart(event.target.value)} className="h-9 rounded-lg border px-2 text-sm" />
+        <input type="date" value={end} onChange={(event) => setEnd(event.target.value)} className="h-9 rounded-lg border px-2 text-sm" />
+      </section>
+      {loading ? <div className="py-16 text-center text-sm text-gray-400">加载中…</div> : logs.length === 0 ? <div className="py-16 text-center text-sm text-gray-400">暂无操作日志</div> :
+        <div className="space-y-2">{logs.map((log) => <article key={log.id} className="rounded-xl bg-white shadow-sm">
+          <button onClick={() => setExpanded(expanded === log.id ? null : log.id)} className="flex w-full items-start gap-3 p-3.5 text-left">
+            <div className={`mt-0.5 rounded-lg p-2 ${log.result === 'success' ? 'bg-[#E8F0FE] text-[#1E5AA8]' : 'bg-red-50 text-red-500'}`}><ShieldCheck className="h-4 w-4"/></div>
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5 text-sm"><b>{log.operator}</b><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{moduleNames[log.module] || log.module}</span><span className="text-gray-500">{actionNames[log.action] || log.action}</span></div><p className="mt-1 break-words text-sm text-gray-600">{log.detail}</p><p className="mt-1 text-xs text-gray-400">{log.created_at}</p></div><ChevronDown className={`h-4 w-4 text-gray-300 transition ${expanded === log.id ? 'rotate-180' : ''}`}/>
+          </button>
+          {expanded === log.id && <div className="space-y-2 border-t px-4 py-3 text-xs text-gray-600">
+            {log.before_data && <div><b>修改前</b><pre className="mt-1 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-2">{JSON.stringify(JSON.parse(log.before_data), null, 2)}</pre></div>}
+            {log.after_data && <div><b>修改后</b><pre className="mt-1 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-2">{JSON.stringify(JSON.parse(log.after_data), null, 2)}</pre></div>}
+            <div className="text-gray-400">结果：{log.result === 'success' ? '成功' : '失败'}{log.ip_address ? ` · IP：${log.ip_address}` : ''}{log.device_type ? ` · ${log.device_type}` : ''}{log.browser ? ` · ${log.browser}` : ''}</div>
+          </div>}
+        </article>)}</div>}
+    </main>
+  </div>;
+}
