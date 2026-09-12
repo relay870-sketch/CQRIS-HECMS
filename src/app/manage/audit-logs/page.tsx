@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
-import { ArrowLeft, ChevronDown, Download, Search, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Download, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
+import { formatStoredAuditData } from '@/lib/audit-format';
 
 interface AuditLog {
   id: string; project_id: string | null; module: string; action: string; entity_type: string;
@@ -31,6 +32,7 @@ export default function AuditLogsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [scope, setScope] = useState<'current' | 'archive'>('current');
   const [summary, setSummary] = useState<AuditSummary | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const query = useMemo(() => new URLSearchParams({ scope, ...(module && { module }), ...(action && { action }), ...(result && { result }), ...(projectId && { projectId }), ...(keyword && { keyword }), ...(start && { start }), ...(end && { end }) }).toString(), [action, end, keyword, module, projectId, result, scope, start]);
   const load = async () => {
@@ -41,6 +43,8 @@ export default function AuditLogsPage() {
   useEffect(() => { void load(); }, [query]);
   useEffect(() => { fetch('/api/projects').then((response) => response.json()).then((data: unknown) => setProjects(Array.isArray(data) ? data as Array<{ id: string; name: string }> : [])).catch(() => setProjects([])); }, []);
   useEffect(() => { fetch('/api/audit-logs?summary=1').then((response) => response.json()).then((data: AuditSummary) => setSummary(data)).catch(() => setSummary(null)); }, []);
+  const activeFilterCount = [projectId, module, action, result, keyword, start, end].filter(Boolean).length;
+  const clearFilters = () => { setProjectId(''); setModule(''); setAction(''); setResult(''); setKeyword(''); setStart(''); setEnd(''); };
 
   const exportLogs = () => {
     const rows = logs.map((log) => ({ 时间: log.created_at, 操作人: log.operator, 模块: moduleNames[log.module] || log.module,
@@ -64,14 +68,24 @@ export default function AuditLogsPage() {
         {summary.riskLevel !== 'normal' && <p className="mt-2 text-xs text-gray-600">检测到较多失败或删除操作，请结合下方日志确认是否正常。</p>}
       </section>}
       <div className="grid grid-cols-2 rounded-xl bg-gray-200 p-1 text-sm"><button onClick={() => setScope('current')} className={`rounded-lg py-2 ${scope === 'current' ? 'bg-white font-medium text-[#1E5AA8] shadow-sm' : 'text-gray-500'}`}>近一年日志</button><button onClick={() => setScope('archive')} className={`rounded-lg py-2 ${scope === 'archive' ? 'bg-white font-medium text-[#1E5AA8] shadow-sm' : 'text-gray-500'}`}>历史归档</button></div>
-      <section className="grid grid-cols-2 gap-2 rounded-xl bg-white p-3 shadow-sm md:grid-cols-4">
-        <div className="relative col-span-2 md:col-span-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索人员、对象或摘要" className="h-9 w-full rounded-lg border pl-9 pr-2 text-sm"/></div>
-        <select value={projectId} onChange={(event) => setProjectId(event.target.value)} className="h-9 rounded-lg border px-2 text-sm"><option value="">全部项目</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
-        <select value={module} onChange={(event) => setModule(event.target.value)} className="h-9 rounded-lg border px-2 text-sm"><option value="">全部模块</option>{Object.entries(moduleNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select>
-        <select value={action} onChange={(event) => setAction(event.target.value)} className="h-9 rounded-lg border px-2 text-sm"><option value="">全部操作</option>{Object.entries(actionNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select>
-        <select value={result} onChange={(event) => setResult(event.target.value)} className="h-9 rounded-lg border px-2 text-sm"><option value="">全部结果</option><option value="success">成功</option><option value="failure">失败</option></select>
-        <input type="date" value={start} onChange={(event) => setStart(event.target.value)} className="h-9 rounded-lg border px-2 text-sm" />
-        <input type="date" value={end} onChange={(event) => setEnd(event.target.value)} className="h-9 rounded-lg border px-2 text-sm" />
+      <section className="overflow-hidden rounded-xl bg-white shadow-sm">
+        <button type="button" onClick={() => setShowFilters((value) => !value)} className="flex w-full items-center gap-2 px-4 py-3 text-left">
+          <SlidersHorizontal className="h-4 w-4 text-[#1E5AA8]"/><span className="flex-1 text-sm font-medium">筛选查询</span>
+          {activeFilterCount > 0 && <span className="rounded-full bg-[#E8F0FE] px-2 py-0.5 text-xs text-[#1E5AA8]">已选 {activeFilterCount} 项</span>}
+          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showFilters ? 'rotate-180' : ''}`}/>
+        </button>
+        {showFilters && <div className="border-t border-gray-100 p-4">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="min-w-0 sm:col-span-2"><span className="mb-1 block text-xs text-gray-500">关键词</span><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="操作人、对象或内容" className="h-9 w-full min-w-0 rounded-lg border pl-9 pr-2 text-sm"/></div></label>
+            <label className="min-w-0"><span className="mb-1 block text-xs text-gray-500">所属项目</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)} className="h-9 w-full min-w-0 rounded-lg border px-2 text-sm"><option value="">全部项目</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+            <label className="min-w-0"><span className="mb-1 block text-xs text-gray-500">功能模块</span><select value={module} onChange={(event) => setModule(event.target.value)} className="h-9 w-full min-w-0 rounded-lg border px-2 text-sm"><option value="">全部模块</option>{Object.entries(moduleNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label>
+            <label className="min-w-0"><span className="mb-1 block text-xs text-gray-500">操作类型</span><select value={action} onChange={(event) => setAction(event.target.value)} className="h-9 w-full min-w-0 rounded-lg border px-2 text-sm"><option value="">全部操作</option>{Object.entries(actionNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label>
+            <label className="min-w-0"><span className="mb-1 block text-xs text-gray-500">操作结果</span><select value={result} onChange={(event) => setResult(event.target.value)} className="h-9 w-full min-w-0 rounded-lg border px-2 text-sm"><option value="">全部结果</option><option value="success">成功</option><option value="failure">失败</option></select></label>
+            <label className="min-w-0"><span className="mb-1 block text-xs text-gray-500">开始日期</span><input type="date" value={start} onChange={(event) => setStart(event.target.value)} className="h-9 w-full min-w-0 rounded-lg border px-2 text-sm" /></label>
+            <label className="min-w-0"><span className="mb-1 block text-xs text-gray-500">结束日期</span><input type="date" value={end} onChange={(event) => setEnd(event.target.value)} className="h-9 w-full min-w-0 rounded-lg border px-2 text-sm" /></label>
+          </div>
+          <div className="mt-3 flex justify-end"><button type="button" onClick={clearFilters} disabled={activeFilterCount === 0} className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-40"><X className="h-3.5 w-3.5"/>清空筛选</button></div>
+        </div>}
       </section>
       {loading ? <div className="py-16 text-center text-sm text-gray-400">加载中…</div> : logs.length === 0 ? <div className="py-16 text-center text-sm text-gray-400">暂无操作日志</div> :
         <div className="space-y-2">{logs.map((log) => <article key={log.id} className="rounded-xl bg-white shadow-sm">
@@ -80,8 +94,8 @@ export default function AuditLogsPage() {
             <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5 text-sm"><b>{log.operator}</b><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{moduleNames[log.module] || log.module}</span><span className="text-gray-500">{actionNames[log.action] || log.action}</span></div><p className="mt-1 break-words text-sm text-gray-600">{log.detail}</p><p className="mt-1 text-xs text-gray-400">{log.created_at}</p></div><ChevronDown className={`h-4 w-4 text-gray-300 transition ${expanded === log.id ? 'rotate-180' : ''}`}/>
           </button>
           {expanded === log.id && <div className="space-y-2 border-t px-4 py-3 text-xs text-gray-600">
-            {log.before_data && <div><b>修改前</b><pre className="mt-1 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-2">{JSON.stringify(JSON.parse(log.before_data), null, 2)}</pre></div>}
-            {log.after_data && <div><b>修改后</b><pre className="mt-1 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-2">{JSON.stringify(JSON.parse(log.after_data), null, 2)}</pre></div>}
+            {log.before_data && <div><b>修改前</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2 leading-5">{formatStoredAuditData(log.before_data)}</div></div>}
+            {log.after_data && <div><b>修改后</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2 leading-5">{formatStoredAuditData(log.after_data)}</div></div>}
             <div className="text-gray-400">结果：{log.result === 'success' ? '成功' : '失败'}{log.ip_address ? ` · IP：${log.ip_address}` : ''}{log.device_type ? ` · ${log.device_type}` : ''}{log.browser ? ` · ${log.browser}` : ''}</div>
           </div>}
         </article>)}</div>}

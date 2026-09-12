@@ -76,6 +76,10 @@ interface ReportRecord {
   quantity: number;
   work_items: string | null;
   photos: string;
+  workers?: string;
+  weather?: string | null;
+  notes?: string | null;
+  system?: string | null;
 }
 
 function parseStoredWorkItems(value: string | null): WorkItem[] {
@@ -251,7 +255,7 @@ async function saveReport(request: Request, editId: string | null) {
   }
 
   const existing = editId
-    ? db.prepare('SELECT id, project_id, date, bom_item_id, quantity, work_items, photos FROM reports WHERE id = ?').get(editId) as ReportRecord | undefined
+    ? db.prepare('SELECT id, project_id, date, bom_item_id, quantity, work_items, photos, workers, weather, notes, system FROM reports WHERE id = ?').get(editId) as ReportRecord | undefined
     : undefined;
   if (editId && (!existing || existing.project_id !== projectId)) {
     return NextResponse.json({ error: '要修改的报工记录不存在或不属于当前项目' }, { status: 404 });
@@ -363,10 +367,29 @@ async function saveReport(request: Request, editId: string | null) {
     } catch (error) { console.error('清理已移除的报工照片失败:', error); }
   }
 
+  const oldStoredItems = existing ? parseStoredWorkItems(existing.work_items) : [];
+  const auditWorkerIds = [...new Set([...selectedWorkers, ...oldStoredItems.flatMap((item) => item.workers)])];
+  const workerRows = auditWorkerIds.length > 0
+    ? db.prepare(`SELECT id, name FROM workers WHERE id IN (${auditWorkerIds.map(() => '?').join(',')})`).all(...auditWorkerIds) as Array<{ id: string; name: string }>
+    : [];
+  const workerNames = new Map(workerRows.map((worker) => [worker.id, worker.name]));
+  const toReadableItem = (item: WorkItem) => ({ name: item.name, code: item.code, unit: item.unit,
+    quantity: item.quantity, location: item.location, attendance: item.attendance,
+    overtimeHours: item.overtimeHours, external: item.external,
+    workers: item.workers.map((workerId) => workerNames.get(workerId) || '已移除人员') });
+  const readableItems = workItems.map(toReadableItem);
+  const oldItems = existing ? oldStoredItems.map(toReadableItem) : undefined;
+  let oldPhotoCount = 0;
+  if (existing) {
+    try { const parsed: unknown = JSON.parse(existing.photos || '[]'); oldPhotoCount = Array.isArray(parsed) ? parsed.length : 0; }
+    catch { oldPhotoCount = 0; }
+  }
   await writeAuditLog(db, request, { projectId, module: 'reports', action: existing ? 'update' : 'create',
     entityType: '施工记录', entityId: id,
     summary: `${existing ? '修改' : '新增'}报工：${date}，${storedWorkItems.length}项施工内容，${selectedWorkers.length}人`,
-    before: existing, after: { date, system: data.system, workItems: storedWorkItems, workers: selectedWorkers,
+    before: existing ? { date: existing.date, system: existing.system, workItems: oldItems, weather: existing.weather,
+      notes: existing.notes, photoCount: oldPhotoCount } : undefined,
+    after: { date, system: data.system, workItems: readableItems, workers: selectedWorkers.map((workerId) => workerNames.get(workerId) || '已移除人员'),
       weather: data.weather, notes: data.notes, photoCount: Array.isArray(data.photos) ? data.photos.length : 0 } });
 
   return NextResponse.json({ success: true, id, updated: !!existing });

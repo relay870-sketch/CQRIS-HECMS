@@ -108,10 +108,10 @@ export default function AccountManagementPage() {
     <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
       <div className="flex items-center gap-2"><Ban className="h-5 w-5 text-red-500"/><h2 className="font-semibold">登录 IP 黑名单</h2></div>
       <p className="mt-1.5 text-xs leading-5 text-gray-400">同一 IP 在30分钟内连续输错密码5次会自动封禁，只有管理员解除后才能再次登录。</p>
-      <div className="mt-3 grid gap-2 md:grid-cols-[180px_1fr_auto]">
-        <input value={ipAddress} onChange={(event) => setIpAddress(event.target.value)} placeholder="IPv4 或 IPv6 地址" className="h-10 rounded-lg border border-gray-200 px-3 text-sm"/>
-        <input value={blockReason} onChange={(event) => setBlockReason(event.target.value)} placeholder="加入黑名单的原因" className="h-10 rounded-lg border border-gray-200 px-3 text-sm"/>
-        <button disabled={savingIp} onClick={() => void addBlockedIp()} className="flex h-10 items-center justify-center gap-1 rounded-lg bg-red-500 px-4 text-sm text-white disabled:opacity-50"><Plus className="h-4 w-4"/>添加</button>
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-2">
+        <label className="min-w-0"><span className="mb-1 block text-xs text-gray-500">IP 地址</span><input value={ipAddress} onChange={(event) => setIpAddress(event.target.value)} placeholder="IPv4 或 IPv6" className="h-10 w-full min-w-0 rounded-lg border border-gray-200 px-3 text-sm"/></label>
+        <label className="min-w-0"><span className="mb-1 block text-xs text-gray-500">封禁原因</span><input value={blockReason} onChange={(event) => setBlockReason(event.target.value)} placeholder="填写加入黑名单的原因" className="h-10 w-full min-w-0 rounded-lg border border-gray-200 px-3 text-sm"/></label>
+        <div><button disabled={savingIp} onClick={() => void addBlockedIp()} className="flex h-10 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-red-500 px-3 text-sm text-white disabled:opacity-50"><Plus className="h-4 w-4 shrink-0"/>添加到黑名单</button></div>
       </div>
     </section>
     <div className="mt-3 space-y-2">

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type Database from 'better-sqlite3';
 import { verifySessionToken } from '@/lib/auth-core';
+import { formatAuditData } from '@/lib/audit-format';
 
 export interface AuditInput {
   projectId?: string | null;
@@ -16,11 +17,12 @@ export interface AuditInput {
   operatorId?: string | null;
 }
 
-function safeJson(value: unknown): string | null {
+function safeText(value: unknown): string | null {
   if (value === undefined || value === null) return null;
-  return JSON.stringify(value, (key, item: unknown) =>
+  const sanitized = JSON.parse(JSON.stringify(value, (key, item: unknown) =>
     /password|token|cookie|secret|api.?key/i.test(key) ? '[已隐藏]' : item,
-  ).slice(0, 50_000);
+  )) as unknown;
+  return formatAuditData(sanitized);
 }
 
 function describeDevice(userAgent: string): { deviceType: string; browser: string } {
@@ -44,7 +46,7 @@ export async function writeAuditLog(db: Database.Database, request: Request, inp
       .run(randomUUID(), input.projectId || null, input.action, input.entityType, input.entityId || null,
         input.summary, input.operatorName || user?.name || '未知用户', input.operatorId || user?.id || null,
         input.module, input.result || 'success', ip, userAgent,
-        safeJson(input.before), safeJson(input.after), device.deviceType, device.browser);
+        safeText(input.before), safeText(input.after), device.deviceType, device.browser);
   } catch (error) {
     console.error('写入操作日志失败:', error);
   }
