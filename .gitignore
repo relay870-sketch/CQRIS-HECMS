@@ -16,7 +16,7 @@ next-env.d.ts
 
 # runtime data: databases, uploaded documents/photos, generated previews and session secrets
 data/
-backups/
+/backups/
 *.zip
 *.tar
 *.tar.gz

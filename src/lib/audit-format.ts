@@ -50,11 +50,31 @@ function formatNode(value: unknown, indent = ''): string[] {
 }
 
 export function formatAuditData(value: unknown): string {
-  return formatNode(value).join('\n').slice(0, 50_000);
+  return removeDuplicateParticipants(formatNode(value).join('\n')).slice(0, 50_000);
 }
 
 export function formatStoredAuditData(value: string | null): string {
   if (!value) return '';
   try { return formatAuditData(JSON.parse(value) as unknown); }
-  catch { return value; }
+  catch { return removeDuplicateParticipants(value); }
+}
+
+/** 旧日志可能同时包含“施工条目人员”和相同的“报工汇总人员”，只保留前者。 */
+export function removeDuplicateParticipants(text: string): string {
+  const lines = text.split('\n');
+  const topLevelStart = lines.findIndex((line) => line === '参与人员：');
+  if (topLevelStart < 0) return text;
+  let topLevelEnd = topLevelStart + 1;
+  while (topLevelEnd < lines.length && /^\s+/.test(lines[topLevelEnd])) topLevelEnd += 1;
+  const topLevelNames = lines.slice(topLevelStart + 1, topLevelEnd).map((line) => line.trim()).join('');
+  if (!topLevelNames) return text;
+  for (let index = 0; index < topLevelStart; index += 1) {
+    if (lines[index].trim() !== '参与人员：' || lines[index] === '参与人员：') continue;
+    const indentation = lines[index].match(/^\s*/)?.[0].length || 0;
+    let end = index + 1;
+    while (end < lines.length && (lines[end].match(/^\s*/)?.[0].length || 0) > indentation) end += 1;
+    const nestedNames = lines.slice(index + 1, end).map((line) => line.trim()).join('');
+    if (nestedNames === topLevelNames) return [...lines.slice(0, topLevelStart), ...lines.slice(topLevelEnd)].join('\n').trim();
+  }
+  return text;
 }

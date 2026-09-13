@@ -5,6 +5,8 @@ import { createSessionToken, verifySessionToken } from '../src/lib/auth-core';
 import { buildDailyAttendance, calculateRevertedQuantity } from '../src/lib/report-rules';
 import Database from 'better-sqlite3';
 import { clearPasswordFailures, findIpSecurity, recordPasswordFailure } from '../src/lib/ip-security';
+import { removeDuplicateParticipants } from '../src/lib/audit-format';
+import { inferDateRange } from '../src/lib/ai-project-context';
 
 test('合同额进度按工程量乘单价加权', () => {
   const result = calculateProjectProgress([
@@ -61,4 +63,17 @@ test('同一 IP 密码错误五次后封禁，解除后可清零', () => {
   clearPasswordFailures(db, '192.0.2.10');
   assert.equal(findIpSecurity(db, '192.0.2.10')?.failed_attempts, 0);
   db.close();
+});
+
+test('日志中相同的施工条目人员和报工汇总人员只显示一次', () => {
+  const text = '施工内容明细：\n  第1项：\n    名称：基础开挖\n    参与人员：\n      张三、李四\n参与人员：\n  张三、李四\n天气：晴';
+  const result = removeDuplicateParticipants(text);
+  assert.equal((result.match(/参与人员：/g) || []).length, 1);
+  assert.match(result, /天气：晴/);
+});
+
+test('AI 项目查询能识别明确日期和最近天数', () => {
+  const now = new Date('2026-09-13T02:00:00.000Z');
+  assert.deepEqual(inferDateRange('查询2026年9月8日到2026年9月12日施工记录', now), { start: '2026-09-08', end: '2026-09-12', label: '2026-09-08至2026-09-12' });
+  assert.deepEqual(inferDateRange('最近3天谁加班最多', now), { start: '2026-09-11', end: '2026-09-13', label: '最近3天' });
 });

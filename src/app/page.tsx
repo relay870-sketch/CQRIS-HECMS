@@ -91,12 +91,15 @@ export default function HomePage() {
     async function fetchReports() {
       setLoading(true);
       try {
+        const today = new Date().toLocaleDateString('en-CA');
+        const since = new Date(); since.setDate(since.getDate() - 6);
+        const dateFrom = since.toLocaleDateString('en-CA');
         const [response, attendanceResponse] = await Promise.all([
-          fetch(`/api/reports?projectId=${currentProject.id}`),
-          fetch(`/api/attendance?projectId=${currentProject.id}`),
+          fetch(`/api/reports?${new URLSearchParams({ projectId: currentProject.id, date: today, all: '1' })}`),
+          fetch(`/api/attendance?${new URLSearchParams({ projectId: currentProject.id, dateFrom })}`),
         ]);
         const [data, attendanceData]: unknown[] = await Promise.all([response.json(), attendanceResponse.json()]);
-        setReports(Array.isArray(data) ? data : []);
+        setReports(Array.isArray(data) ? data as Report[] : []);
         setAttendanceRows(Array.isArray(attendanceData) ? attendanceData as AttendanceRow[] : []);
       } catch (error) {
         console.error('Failed to fetch reports:', error);

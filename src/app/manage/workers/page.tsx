@@ -151,7 +151,7 @@ function WorkersPageInner() {
       </div>
 
       {/* 内容区域 */}
-      <div className="pt-14 pb-6 px-4">
+      <div className="px-4 pb-6 pt-14 md:hidden">
         {loading ? (
           <div className="text-center py-12 text-gray-400">加载中...</div>
         ) : workers.length === 0 ? (
@@ -213,6 +213,21 @@ function WorkersPageInner() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      <div className="hidden px-5 pb-8 pt-16 md:block">
+        {loading ? <div className="py-16 text-center text-gray-400">加载中...</div> : workers.length === 0 ? <div className="rounded-2xl bg-white py-16 text-center text-gray-400">暂无人员</div> : (
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-5 py-3 text-sm text-gray-500">共 {workers.length} 人，{Object.keys(groupedWorkers).length} 个班组</div>
+            <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500"><tr><th className="px-5 py-3">姓名</th><th className="px-4 py-3">班组</th><th className="px-4 py-3">岗位</th><th className="px-4 py-3">联系电话</th><th className="px-4 py-3">入场日期</th><th className="px-5 py-3 text-right">操作</th></tr></thead>
+              <tbody className="divide-y divide-gray-100">{workers.map((worker) => <tr key={worker.id} className="hover:bg-blue-50/30">
+                <td className="px-5 py-4 font-medium text-gray-900">{worker.name}</td><td className="px-4 py-4 text-gray-600">{worker.team || '未分组'}</td><td className="px-4 py-4"><span className="rounded bg-[#E8F0FE] px-2 py-1 text-xs text-[#1E5AA8]">{worker.role || '未设置'}</span></td><td className="px-4 py-4 text-gray-600">{worker.phone || '—'}</td><td className="px-4 py-4 text-gray-500">{worker.join_date || '—'}</td>
+                <td className="px-5 py-4"><div className="flex justify-end gap-1"><button onClick={() => handleEdit(worker)} className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-[#1E5AA8]" aria-label={`编辑${worker.name}`}><Pencil size={16} /></button><button onClick={() => handleDelete(worker.id)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500" aria-label={`删除${worker.name}`}><Trash2 size={16} /></button></div></td>
+              </tr>)}</tbody>
+            </table></div>
           </div>
         )}
       </div>

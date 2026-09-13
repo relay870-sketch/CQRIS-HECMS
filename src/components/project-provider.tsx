@@ -94,22 +94,27 @@ export function ProjectSelector() {
     setIsOpen(false);
   }, [setCurrentProject]);
 
+  const shortProjectName = currentProject.name
+    .replace(/(?:高速公路|高速)?机电(?:安装)?工程.*$/, '')
+    .replace(/施工(?:总承包)?项目.*$/, '')
+    .trim() || currentProject.name;
+
   return (
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1 py-1.5 rounded-lg hover:opacity-80 active:opacity-60 transition-opacity"
       >
-        <span className="text-sm font-medium text-white truncate max-w-[130px]">
-          {currentProject.name}
+        <span className="max-w-[140px] truncate text-base font-semibold text-white">
+          {shortProjectName}
         </span>
         <ChevronDown className={`w-4 h-4 text-white/80 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-xl shadow-lg border border-gray-100 z-50 overflow-hidden">
+          <div className="fixed inset-0 z-[65]" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 top-full z-[70] mt-1 w-64 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg">
             <div className="p-2 border-b border-gray-50">
               <div className="text-xs text-gray-400 px-2 py-1">切换项目</div>
             </div>

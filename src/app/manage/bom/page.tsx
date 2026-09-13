@@ -538,7 +538,7 @@ function BomManagement() {
       </div>
 
       {/* BOM List */}
-      <div className="px-4 space-y-3">
+      <div className="space-y-3 px-4 md:hidden">
         {filteredItems.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <p>{bomItems.length === 0 ? '暂无清单子目' : '没有符合条件的子目'}</p>
@@ -615,6 +615,20 @@ function BomManagement() {
               </div>
             );
           })
+        )}
+      </div>
+
+      <div className="hidden px-4 md:block">
+        {filteredItems.length === 0 ? <div className="rounded-2xl bg-white py-16 text-center text-gray-400">{bomItems.length === 0 ? '暂无清单子目' : '没有符合条件的子目'}</div> : (
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500"><tr>{selectMode && <th className="w-12 px-4 py-3"></th>}<th className="px-4 py-3">编号 / 子目名称</th><th className="px-4 py-3">所属系统</th><th className="px-4 py-3 text-right">合同工程量</th><th className="px-4 py-3 text-right">已完成</th><th className="px-4 py-3 text-right">单价</th><th className="px-4 py-3 text-right">合同金额</th><th className="w-40 px-4 py-3">进度</th><th className="w-24 px-4 py-3 text-right">操作</th></tr></thead>
+            <tbody className="divide-y divide-gray-100">{filteredItems.map((item) => { const progress = getProgress(item); const isSelected = selectedIds.includes(item.id); return <tr key={item.id} className={`hover:bg-blue-50/30 ${isSelected ? 'bg-blue-50' : ''}`} onClick={selectMode ? () => toggleSelect(item.id) : undefined}>
+              {selectMode && <td className="px-4 py-3"><div className={`flex h-5 w-5 items-center justify-center rounded border ${isSelected ? 'border-[#1E5AA8] bg-[#1E5AA8]' : 'border-gray-300'}`}>{isSelected && <Check className="h-4 w-4 text-white" />}</div></td>}
+              <td className="px-4 py-3"><div className="font-medium text-gray-900">{item.name}</div><div className="mt-0.5 font-mono text-xs text-gray-400">{item.code}</div></td><td className="px-4 py-3 text-gray-600">{item.system || '未指定'}</td><td className="whitespace-nowrap px-4 py-3 text-right">{item.total_qty} {item.unit}</td><td className="whitespace-nowrap px-4 py-3 text-right font-medium text-[#1E5AA8]">{item.completed_qty} {item.unit}</td><td className="whitespace-nowrap px-4 py-3 text-right text-gray-600">{item.unit_price > 0 ? `¥${item.unit_price.toLocaleString()}` : '未定价'}</td><td className="whitespace-nowrap px-4 py-3 text-right text-gray-600">{item.unit_price > 0 ? `¥${(item.total_qty * item.unit_price).toLocaleString()}` : '—'}</td>
+              <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100"><div className={`h-full rounded-full ${progress >= 100 ? 'bg-green-500' : 'bg-[#1E5AA8]'}`} style={{ width: `${Math.min(progress, 100)}%` }} /></div><span className="w-10 text-right text-xs font-medium">{progress}%</span></div></td>
+              <td className="px-4 py-3"><div className="flex justify-end gap-1">{!selectMode && <><button onClick={() => openEditForm(item)} className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-[#1E5AA8]" aria-label={`编辑${item.name}`}><Edit2 className="h-4 w-4" /></button><button onClick={() => handleDelete(item)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500" aria-label={`删除${item.name}`}><Trash2 className="h-4 w-4" /></button></>}</div></td>
+            </tr>; })}</tbody>
+          </table></div></div>
         )}
       </div>
 

@@ -137,11 +137,17 @@ body {
 
   background: #F5F6F8;
   color: #1A1A2E;
-  max-width: 480px;
-  margin: 0 auto;
+  width: 100%;
   min-height: 100dvh;
   position: relative;
   -webkit-font-smoothing: antialiased;
+}
+
+@media (max-width: 767px) {
+  body {
+    max-width: 480px;
+    margin: 0 auto;
+  }
 }
 
 /* Bottom tab safe area */
@@ -156,6 +162,12 @@ body {
 
 .pt-header {
   padding-top: calc(48px + env(safe-area-inset-top, 0px));
+}
+
+@media (min-width: 768px) {
+  .pb-tab {
+    padding-bottom: 0;
+  }
 }
 
 /* Custom scrollbar hide */

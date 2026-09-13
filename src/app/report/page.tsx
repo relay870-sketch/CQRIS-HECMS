@@ -82,7 +82,7 @@ export default function ReportPage() {
   const [workItems, setWorkItems] = useState<WorkItemDraft[]>([
     { key: nextWorkItemKey(), name: '', unit: '米', quantity: '', location: '', attendance: 'full', overtime: false, overtimeHours: '', external: false, workers: [] },
   ]);
-  const [weather, setWeather] = useState('');
+  const [weather, setWeather] = useState('晴');
   const [notes, setNotes] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [existingPhotos, setExistingPhotos] = useState<Photo[]>([]);
@@ -123,19 +123,19 @@ export default function ReportPage() {
     if (!isReady || currentProject.name === '加载中...') return;
     async function fetchData() {
       try {
-        const [bomRes, workersRes, locRes, sysRes, reportsRes] = await Promise.all([
+        const [bomRes, workersRes, locRes, sysRes, reportRes] = await Promise.all([
           fetch(`/api/bom?projectId=${currentProject.id}`),
           fetch(`/api/workers?projectId=${currentProject.id}`),
           fetch(`/api/locations?projectId=${currentProject.id}`),
           fetch(`/api/systems?projectId=${currentProject.id}`),
-          fetch(`/api/reports?projectId=${currentProject.id}`),
+          fetch(editId ? `/api/reports?id=${encodeURIComponent(editId)}` : `/api/reports?projectId=${currentProject.id}&latest=1`),
         ]);
-        const [bomData, workersData, locData, sysData, reportsData] = await Promise.all([
+        const [bomData, workersData, locData, sysData, reportData] = await Promise.all([
           bomRes.json(),
           workersRes.json(),
           locRes.json(),
           sysRes.json(),
-          reportsRes.json(),
+          reportRes.json(),
         ]);
         setBomItems(Array.isArray(bomData) ? bomData : []);
         setWorkerList(Array.isArray(workersData) ? workersData : []);
@@ -147,8 +147,8 @@ export default function ReportPage() {
         }
 
         // 最近一条报工的人员，用于现场快速复用。
-        if (Array.isArray(reportsData) && reportsData.length > 0) {
-          const latest = reportsData[0] as { workers?: unknown };
+        if (!editId && reportData && typeof reportData === 'object') {
+          const latest = reportData as { workers?: unknown };
           if (typeof latest.workers === 'string') {
             try {
               const parsed: unknown = JSON.parse(latest.workers);
@@ -162,13 +162,13 @@ export default function ReportPage() {
         }
 
 
-        if (editId && Array.isArray(reportsData)) {
-          const report = (reportsData as EditableReport[]).find((item) => item.id === editId);
-          if (!report) {
+        if (editId) {
+          if (!reportRes.ok || !reportData || typeof reportData !== 'object') {
             toast.error('要修改的报工记录不存在');
             router.replace('/records');
             return;
           }
+          const report = reportData as EditableReport;
           let parsedWorkers: string[] = [];
           let parsedItems: Array<Record<string, unknown>> = [];
           let parsedPhotos: Photo[] = [];
@@ -205,14 +205,11 @@ export default function ReportPage() {
           setDate(report.date);
           setSelectedSystem(report.system || '');
           setWorkItems(drafts);
-          setWeather(report.weather || '');
+          setWeather(report.weather || '晴');
           setNotes(report.notes || '');
           setExistingPhotos(parsedPhotos);
         }
 
-        // 恢复上次的人员与天气
-        const lastWeather = localStorage.getItem('report_last_weather');
-        if (lastWeather) setWeather(lastWeather);
       } catch (error) {
         console.error('加载基础数据失败:', error);
       } finally {
@@ -417,9 +414,8 @@ export default function ReportPage() {
 
       const result: { error?: string } = await response.json();
       if (response.ok) {
-        // 记住本次的人员与天气，方便下次快速填写
+        // 记住本次的人员，方便下次快速填写
         localStorage.setItem(`report_last_workers_${currentProject.id}`, JSON.stringify(allWorkerIds));
-        localStorage.setItem('report_last_weather', weather || '');
         toast.success(editId ? '报工记录修改成功' : '报工提交成功');
         router.push('/records');
       } else {

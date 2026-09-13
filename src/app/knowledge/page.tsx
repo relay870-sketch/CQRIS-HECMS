@@ -540,9 +540,9 @@ export default function KnowledgePage() {
               <div className="text-center py-12">
                 <Bot className="w-12 h-12 text-[#1E5AA8] mx-auto mb-3" />
                 <p className="text-[#1A1A2E] font-medium">AI 知识助手</p>
-                <p className="text-gray-400 text-sm mt-1">基于知识库内容为您解答问题</p>
+                <p className="text-gray-400 text-sm mt-1">查询项目、清单、考勤、施工记录和知识库</p>
                 <div className="mt-4 space-y-2">
-                  {['监控摄像机安装流程是什么？', '光缆敷设有哪些安全注意事项？', '工程量清单如何查看？'].map((q) => (
+                  {['生成今天的施工日报', '本月谁加班最多？', '哪些清单子目还没有完成？', '最近7天有哪些合同外施工？'].map((q) => (
                     <button
                       key={q}
                       onClick={() => { setChatInput(q); }}

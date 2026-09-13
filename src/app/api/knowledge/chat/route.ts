@@ -2,9 +2,11 @@ import { NextRequest } from 'next/server';
 import { LLMClient, KnowledgeClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { isCozeApiConfigured } from '@/lib/storage';
 import { completeChat, getLlmConfig, streamChat, type LlmConfig, type LlmMessage } from '@/lib/llm';
+import { buildProjectDataContext } from '@/lib/ai-project-context';
+import { getDb } from '@/lib/db';
+import { writeAuditLog } from '@/lib/audit';
 import {
   searchKnowledge,
-  getRecentReports,
   getProjectName,
   saveChatMessage,
   getChatHistory,
@@ -50,9 +52,6 @@ const SSE_HEADERS: Record<string, string> = {
   'Cache-Control': 'no-cache',
   'Connection': 'keep-alive',
 };
-
-/** 问题涉及日报/记录时触发日报数据查询 */
-const REPORT_KEYWORDS = /日报|报工|记录|汇总|统计|今天|昨天|本周|最近|加班|出勤|台账/;
 
 function parseMemorySnapshot(content: string): ProjectMemorySnapshot | null {
   const start = content.indexOf('{');
@@ -106,7 +105,14 @@ export async function POST(request: NextRequest) {
     }
 
     const pid = typeof projectId === 'string' ? projectId : '';
+    if (pid && !getDb().prepare('SELECT 1 FROM projects WHERE id = ?').get(pid)) {
+      return new Response(JSON.stringify({ error: '当前项目不存在或已被删除' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
     const projectMemoryText = pid ? getProjectMemoryText(pid) : '';
+    const projectDataText = pid ? buildProjectDataContext(message.trim(), pid) : '';
+    if (projectDataText) {
+      void writeAuditLog(getDb(), request, { projectId: pid, module: 'system', action: 'ai_query', entityType: '项目数据', summary: 'AI 只读查询项目、清单、考勤或施工记录数据' });
+    }
     // 先保存用户消息（按项目永久记忆）
     saveChatMessage(pid, 'user', message);
 
@@ -136,16 +142,20 @@ export async function POST(request: NextRequest) {
       }
 
       // Step 2: Build messages with context
-      const systemPrompt = `你是重庆瑞思施工管理系统的团队知识库助手。你的职责是帮助团队成员查询项目资料、解答施工技术问题。
+      const systemPrompt = `你是重庆瑞思施工管理系统的团队智能助手。你的职责是查询当前项目真实数据、帮助团队成员查询项目资料、解答施工技术问题。
 
 请遵循以下规则：
-1. 基于提供的参考资料回答问题，如果参考资料中没有相关信息，请如实告知
+1. 项目统计和事实必须基于“项目实时数据”，技术问题优先基于“参考资料”；没有数据时如实告知，禁止编造
 2. 回答要简洁、专业、实用，适合施工现场人员阅读
 3. 涉及安全规范的问题要特别强调安全注意事项
-4. 如果引用了参考资料，请注明来源编号
-5. 如果问题不清晰，请主动询问以获取更多信息
+4. 每个项目统计结论必须注明时间范围，并引用[项目数据1-4]；引用文档时注明[参考资料编号]
+5. “人·小时”表示人数乘以每人加班小时，不得误写成普通小时
+6. 系统进度与按合同金额计算进度不一致时，分别说明口径
+7. 如果问题不清晰，请主动询问以获取更多信息
 
-${contextText ? `以下是与用户问题相关的参考资料：\n\n${contextText}` : '当前没有匹配的参考资料，请基于你的专业知识回答。'}`;
+${projectMemoryText ? `【项目长期记忆】\n${projectMemoryText}\n` : ''}
+${projectDataText ? `【项目实时数据】\n${projectDataText}\n` : ''}
+${contextText ? `【知识库参考资料】\n${contextText}` : '当前没有匹配的知识库资料。'}`;
 
       const messages = [
         { role: 'system' as const, content: systemPrompt },
@@ -199,31 +209,30 @@ ${contextText ? `以下是与用户问题相关的参考资料：\n\n${contextTe
     }
 
     const pname =
-      (typeof projectName === 'string' && projectName) ||
       (pid ? getProjectName(pid) : '') ||
+      (typeof projectName === 'string' && projectName) ||
       '当前项目';
 
     // Step 1: 按项目自动检索本地知识库
     const knowledgeText = searchKnowledge(message, pid, 4);
 
-    // Step 2: 问题涉及日报/记录时，查询最近 7 天报工数据
-    const reportsText =
-      pid && REPORT_KEYWORDS.test(message) ? getRecentReports(pid, 7) : '';
-
-    // Step 3: 构建 system prompt（带资料与数据）
+    // Step 2: 构建 system prompt（带知识资料、长期记忆和按需查询的项目实时数据）
     const systemPrompt = `你是重庆瑞思施工管理系统（${pname}）的团队智能助手。你的职责：解答施工技术问题、查询项目资料、整理施工日报和记录。
 
 请遵循以下规则：
-1. 优先使用下面提供的"参考资料"和"日报数据"回答；资料中没有的信息，如实告知，不要编造
+1. 项目统计和事实必须使用“项目实时数据”，技术问题优先使用“知识库参考资料”；没有数据时如实告知，不要编造
 2. 回答要简洁、专业、实用，适合施工现场人员阅读
 3. 涉及安全规范的问题要特别强调安全注意事项
 4. 引用资料时注明文档名称或资料编号
-5. 整理日报/记录时，按日期分组列出工作内容，并给出统计（报工次数、工作类型分布、问题/异常记录），突出需要注意的事项
-6. 如果问题与提供的资料无关（如闲聊），可以正常回答
+5. 每个项目统计结论注明时间范围，并引用[项目数据1-4]；引用资料时注明[资料编号]
+6. 整理日报时按日期和施工位置列出内容，统计出勤、加班人·小时、合同外施工与现场说明
+7. “人·小时”是人数乘以每人加班小时；系统进度与合同金额进度口径不同时分别说明
+8. 只能读取和分析数据，不能声称已经修改、删除或新增系统记录
+9. 如果问题与提供的资料无关（如闲聊），可以正常回答
 
 ${projectMemoryText ? `【项目长期记忆】\n${projectMemoryText}\n` : ''}
 ${knowledgeText ? `【知识库参考资料】\n${knowledgeText}` : ''}
-${reportsText ? `\n【施工日报数据（最近 7 天）】\n${reportsText}` : ''}`;
+${projectDataText ? `\n【项目实时数据】\n${projectDataText}` : ''}`;
 
     // 对话历史：优先从该项目的永久记忆中取最近几条（前端传入的仅兜底）
     const storedHistory = pid ? getChatHistory(pid, 30).slice(-6) : [];

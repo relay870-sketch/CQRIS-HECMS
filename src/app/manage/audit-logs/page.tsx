@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { ArrowLeft, ChevronDown, Download, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
@@ -16,7 +16,7 @@ interface AuditLog {
 interface AuditSummary { failed24h: number; loginFailed30m: number; deletes24h: number; riskLevel: 'normal' | 'medium' | 'high' }
 
 const moduleNames: Record<string, string> = { auth: '账号登录', accounts: '账号管理', reports: '施工报工', attendance: '考勤管理', projects: '项目管理', workers: '人员管理', bom: '工程量清单', locations: '桩号管理', documents: '资料库', systems: '子系统管理', system: '系统' };
-const actionNames: Record<string, string> = { create: '新增', update: '修改', delete: '删除', login: '登录', logout: '退出', login_failed: '登录失败', blocked_login: '拦截登录', block_ip: '封禁IP', unblock_ip: '解除IP', review: '审核', import: '导入', upload: '上传', manual_update: '人工修正' };
+const actionNames: Record<string, string> = { create: '新增', update: '修改', delete: '删除', login: '登录', logout: '退出', login_failed: '登录失败', blocked_login: '拦截登录', block_ip: '封禁IP', unblock_ip: '解除IP', review: '审核', import: '导入', upload: '上传', manual_update: '人工修正', backup: '数据备份', restore: '数据恢复', ai_query: 'AI查询' };
 
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -99,8 +99,17 @@ export default function AuditLogsPage() {
           <div className="mt-3 flex justify-end"><button type="button" onClick={clearFilters} disabled={activeFilterCount === 0} className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-40"><X className="h-3.5 w-3.5"/>清空筛选</button></div>
         </div>}
       </section>
-      {loading ? <div className="py-16 text-center text-sm text-gray-400">加载中…</div> : logs.length === 0 ? <div className="py-16 text-center text-sm text-gray-400">暂无操作日志</div> :
-        <div className="space-y-2">{logs.map((log) => {
+      {loading ? <div className="py-16 text-center text-sm text-gray-400">加载中…</div> : logs.length === 0 ? <div className="py-16 text-center text-sm text-gray-400">暂无操作日志</div> : <>
+        <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block"><div className="overflow-x-auto"><table className="w-full min-w-[960px] table-fixed text-left text-sm">
+          <thead className="bg-gray-50 text-xs text-gray-500"><tr><th className="w-40 px-4 py-3">时间</th><th className="w-24 px-3 py-3">操作人</th><th className="w-28 px-3 py-3">模块</th><th className="w-24 px-3 py-3">操作</th><th className="px-3 py-3">摘要</th><th className="w-20 px-3 py-3">结果</th><th className="w-20 px-4 py-3 text-right">详情</th></tr></thead>
+          <tbody className="divide-y divide-gray-100">{logs.map((log) => {
+            const beforeDetails = supplementaryDetails(log.before_data, log); const afterDetails = supplementaryDetails(log.after_data, log);
+            return <Fragment key={log.id}><tr className="hover:bg-blue-50/30"><td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">{log.created_at}</td><td className="px-3 py-3 font-medium text-gray-900">{log.operator}</td><td className="px-3 py-3"><span className="rounded bg-gray-100 px-2 py-1 text-xs">{moduleNames[log.module] || log.module}</span></td><td className="px-3 py-3 text-gray-600">{actionNames[log.action] || log.action}</td><td className="truncate px-3 py-3 text-gray-600" title={log.detail}>{log.detail}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs ${log.result === 'success' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>{log.result === 'success' ? '成功' : '失败'}</span></td><td className="px-4 py-3 text-right"><button onClick={() => setExpanded(expanded === log.id ? null : log.id)} className="rounded-lg px-2 py-1 text-xs text-[#1E5AA8] hover:bg-blue-50">{expanded === log.id ? '收起' : '查看'}</button></td></tr>
+              {expanded === log.id && <tr><td colSpan={7} className="bg-gray-50 px-6 py-4"><div className="grid gap-3 lg:grid-cols-2">{beforeDetails && <div><b className="text-xs">修改前</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs leading-5 text-gray-600">{beforeDetails}</div></div>}{afterDetails && <div><b className="text-xs">修改后</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs leading-5 text-gray-600">{afterDetails}</div></div>}</div><div className="mt-2 text-xs text-gray-400">IP：{log.ip_address || '—'} · {log.device_type || '未知设备'} · {log.browser || '未知浏览器'}</div></td></tr>}
+            </Fragment>;
+          })}</tbody>
+        </table></div></div>
+        <div className="space-y-2 md:hidden">{logs.map((log) => {
           const beforeDetails = supplementaryDetails(log.before_data, log);
           const afterDetails = supplementaryDetails(log.after_data, log);
           return <article key={log.id} className="rounded-xl bg-white shadow-sm">
@@ -113,7 +122,7 @@ export default function AuditLogsPage() {
             {afterDetails && <div><b>修改后</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2 leading-5">{afterDetails}</div></div>}
             <div className="text-gray-400">结果：{log.result === 'success' ? '成功' : '失败'}{log.ip_address ? ` · IP：${log.ip_address}` : ''}{log.device_type ? ` · ${log.device_type}` : ''}{log.browser ? ` · ${log.browser}` : ''}</div>
           </div>}
-        </article>;})}</div>}
+        </article>;})}</div></>}
     </main>
   </div>;
 }

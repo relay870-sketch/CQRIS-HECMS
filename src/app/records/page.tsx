@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useProject } from '@/components/project-provider';
 import { Calendar, MapPin, Users, Camera, ChevronDown, Search, List, Clock, X, Download, Pencil } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -40,6 +40,8 @@ interface WorkItemDetail {
   workers?: string[];
 }
 
+interface ReportPagination { page: number; pageSize: number; total: number; totalPages: number }
+
 interface Worker {
   id: string;
   name: string;
@@ -56,6 +58,7 @@ export default function RecordsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<{ name: string; url: string } | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+  const [pagination, setPagination] = useState<ReportPagination>({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
 
   // 导出相关状态
   const [showExport, setShowExport] = useState(false);
@@ -66,24 +69,26 @@ export default function RecordsPage() {
   const [customEnd, setCustomEnd] = useState('');
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject.id]);
+  }, [currentProject.id, pagination.page, pagination.pageSize, filterDate, searchQuery]);
 
 
   async function fetchData() {
     setLoading(true);
     try {
       const [reportsRes, workersRes] = await Promise.all([
-        fetch(`/api/reports?projectId=${currentProject.id}`),
+        fetch(`/api/reports?${new URLSearchParams({ projectId: currentProject.id, page: String(pagination.page), pageSize: String(pagination.pageSize), ...(filterDate && { date: filterDate }), ...(searchQuery && { keyword: searchQuery }) })}`),
         fetch(`/api/workers?projectId=${currentProject.id}`),
       ]);
       const [reportsData, workersData] = await Promise.all([
         reportsRes.json(),
         workersRes.json(),
       ]);
-      setReports(reportsData);
-      setWorkers(workersData);
+      const paged = reportsData as { items?: unknown; pagination?: ReportPagination };
+      setReports(Array.isArray(paged.items) ? paged.items as Report[] : []);
+      if (paged.pagination) setPagination(paged.pagination);
+      setWorkers(Array.isArray(workersData) ? workersData as Worker[] : []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -199,10 +204,12 @@ export default function RecordsPage() {
   });
 
   const applySearch = () => {
+    setPagination((current) => ({ ...current, page: 1 }));
     setSearchQuery(searchDraft.trim());
   };
   const clearSearch = () => {
     setSearchDraft('');
+    setPagination((current) => ({ ...current, page: 1 }));
     setSearchQuery('');
   };
 
@@ -239,29 +246,53 @@ export default function RecordsPage() {
     return `${report.work_type} ${report.quantity}${report.unit}`;
   };
 
-  // 按导出范围筛选记录
-  const getExportReports = (): Report[] => {
-    const now = new Date();
-    const monthPrefix = now.toISOString().slice(0, 7);
-    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const getAttendanceDetails = (report: Report) => {
+    const reportWorkerIds = parseStringArray(report.workers);
+    const items = parseWorkItems(report.work_items);
+    const attendanceItems = items.length > 0 ? items : [{
+      name: report.work_type,
+      unit: report.unit,
+      quantity: report.quantity,
+      attendance: 'full' as const,
+      overtimeHours: 0,
+      workers: reportWorkerIds,
+    }];
 
-    let list = reports;
-    if (reportRange === 'current') {
-      list = filteredReports;
-    } else if (reportRange === 'month') {
-      list = reports.filter((r) => r.date.startsWith(exportMonth));
-    } else if (reportRange === 'lastMonth') {
-      list = reports.filter((r) => r.date.startsWith(lastMonthPrefix));
-    } else if (reportRange === 'custom') {
-      if (!customStart || !customEnd) return [];
-      list = reports.filter((r) => r.date >= customStart && r.date <= customEnd);
-    }
-    return [...list].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    return attendanceItems.map((item) => {
+      const workerIds = item.workers && item.workers.length > 0 ? item.workers : reportWorkerIds;
+      return {
+        name: item.name,
+        workerNames: workerIds.map(getWorkerName).join('、') || '未关联人员',
+        attendanceLabel: item.attendance === 'half' ? '半天' : item.attendance === 'none' ? '不计考勤' : '全天',
+        overtimeHours: item.overtimeHours || 0,
+      };
+    });
   };
 
-  const doExportReports = () => {
-    const list = getExportReports();
+  // 按导出范围筛选记录
+  const getExportReports = async (): Promise<Report[]> => {
+    const now = new Date();
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
+    const params = new URLSearchParams({ projectId: currentProject.id, all: '1' });
+    if (reportRange === 'current') {
+      if (filterDate) params.set('date', filterDate);
+      if (searchQuery) params.set('keyword', searchQuery);
+    } else if (reportRange === 'month') {
+      params.set('dateFrom', `${exportMonth}-01`); params.set('dateTo', `${exportMonth}-31`);
+    } else if (reportRange === 'lastMonth') {
+      params.set('dateFrom', `${lastMonthPrefix}-01`); params.set('dateTo', `${lastMonthPrefix}-31`);
+    } else if (reportRange === 'custom') {
+      if (!customStart || !customEnd) return [];
+      params.set('dateFrom', customStart); params.set('dateTo', customEnd);
+    }
+    const response = await fetch(`/api/reports?${params}`);
+    const data: unknown = await response.json();
+    return Array.isArray(data) ? (data as Report[]).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)) : [];
+  };
+
+  const doExportReports = async () => {
+    const list = await getExportReports();
     if (list.length === 0) {
       toast.info('没有符合条件的数据可导出');
       return;
@@ -308,9 +339,11 @@ export default function RecordsPage() {
     setShowExport(false);
   };
 
-  const doExportAttendance = () => {
+  const doExportAttendance = async () => {
     const prefix = exportMonth;
-    const monthReports = reports.filter((r) => r.date.startsWith(prefix));
+    const response = await fetch(`/api/reports?${new URLSearchParams({ projectId: currentProject.id, all: '1', dateFrom: `${prefix}-01`, dateTo: `${prefix}-31` })}`);
+    const data: unknown = await response.json();
+    const monthReports = Array.isArray(data) ? data as Report[] : [];
     if (monthReports.length === 0) {
       toast.info(`${prefix} 月份暂无报工，无法导出考勤`);
       return;
@@ -441,12 +474,12 @@ export default function RecordsPage() {
             <input
               type="date"
               value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
+              onChange={(e) => { setPagination((current) => ({ ...current, page: 1 })); setFilterDate(e.target.value); }}
               className="w-full pl-9 pr-4 py-2.5 bg-[#F5F6F8] rounded-lg text-sm text-[#1A1A2E]"
             />
           </div>
           <button
-            onClick={() => setFilterDate('')}
+            onClick={() => { setPagination((current) => ({ ...current, page: 1 })); setFilterDate(''); }}
             className="shrink-0 px-3 py-2.5 bg-[#F5F6F8] rounded-lg text-sm text-gray-500"
           >
             重置
@@ -483,7 +516,18 @@ export default function RecordsPage() {
       {/* Records */}
       <div className="px-4 py-3">
         {viewMode === 'list' ? (
-          <div className="space-y-3">
+          <>
+          <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block"><div className="overflow-x-auto"><table className="w-full min-w-[1240px] table-fixed text-left text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500"><tr><th className="w-28 px-4 py-3">日期</th><th className="w-28 px-3 py-3">系统</th><th className="w-56 px-3 py-3">施工位置</th><th className="w-64 px-3 py-3">施工内容 / 数量</th><th className="w-72 px-3 py-3">参与人员 / 考勤</th><th className="w-20 px-3 py-3">天气</th><th className="w-24 px-3 py-3">提交人</th><th className="w-36 px-4 py-3 text-right">操作</th></tr></thead>
+            <tbody className="divide-y divide-gray-100">{filteredReports.map((report) => {
+              const workerIds = parseStringArray(report.workers); const workItems = parseWorkItems(report.work_items); const photos = parsePhotos(report.photos); const open = expandedId === report.id; const attendanceDetails = getAttendanceDetails(report);
+              const locations = [...new Set((workItems.length > 0 ? workItems.map((item) => item.location) : [report.location]).filter(Boolean))].join('；');
+              return <Fragment key={report.id}><tr className="hover:bg-blue-50/30"><td className="whitespace-nowrap px-4 py-3 align-top font-medium text-gray-900">{report.date}</td><td className="px-3 py-3 align-top"><span className="rounded bg-[#E8F0FE] px-2 py-1 text-xs text-[#1E5AA8]">{report.system || workTypeMap[report.work_type] || report.work_type}</span></td><td className="px-3 py-3 align-top text-gray-600"><div className="whitespace-normal break-words leading-5">{locations || '—'}</div></td><td className="px-3 py-3 align-top font-medium text-gray-800"><div className="whitespace-normal break-words leading-5">{parseWorkItemsForExport(report)}</div></td><td className="px-3 py-3 align-top"><div className="space-y-2">{attendanceDetails.map((detail, index) => <div key={`${detail.name}-${index}`} className="rounded-lg bg-gray-50 px-2.5 py-2"><div className="break-words text-xs font-medium leading-5 text-gray-700">{detail.workerNames}</div><div className="mt-1 flex flex-wrap items-center gap-1"><span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${detail.attendanceLabel === '全天' ? 'bg-green-100 text-green-700' : detail.attendanceLabel === '半天' ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-600'}`}>{detail.attendanceLabel}</span>{detail.overtimeHours > 0 && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[11px] font-medium text-orange-700">加班 {detail.overtimeHours}小时</span>}{attendanceDetails.length > 1 && <span className="truncate text-[11px] text-gray-400" title={detail.name}>{detail.name}</span>}</div></div>)}</div></td><td className="px-3 py-3 align-top text-gray-600">{report.weather || '—'}</td><td className="px-3 py-3 align-top text-gray-600">{getSubmitterName(report.submitter)}</td><td className="px-4 py-3 align-top"><div className="flex justify-end gap-1"><button onClick={() => setExpandedId(open ? null : report.id)} className="rounded-lg px-2 py-1.5 text-xs text-[#1E5AA8] hover:bg-blue-50">{open ? '收起' : '详情'}</button><button onClick={() => window.location.assign(`/report?edit=${encodeURIComponent(report.id)}`)} className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-[#1E5AA8]" aria-label="修改记录"><Pencil className="h-4 w-4" /></button><button onClick={() => handleDeleteReport(report.id)} className="rounded-lg px-2 py-1.5 text-xs text-red-500 hover:bg-red-50">删除</button></div></td></tr>
+                {open && <tr><td colSpan={8} className="bg-gray-50 px-6 py-4"><div className="grid gap-4 lg:grid-cols-[1fr_280px]"><div><div className="text-xs font-medium text-gray-400">参与人员</div><div className="mt-1 text-sm text-gray-700">{workerIds.length > 0 ? workerIds.map(getWorkerName).join('、') : '未关联人员'}</div>{report.notes && <><div className="mt-3 text-xs font-medium text-gray-400">现场说明</div><div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{report.notes}</div></>}<div className="mt-3 text-xs text-gray-400">上传时间：{formatSubmittedAt(report.created_at)}</div></div><div><div className="text-xs font-medium text-gray-400">现场照片（{photos.length}张）</div>{photos.length > 0 ? <div className="mt-2 grid grid-cols-4 gap-2">{photos.slice(0, 8).map((photo, index) => <button key={`${photo.url}-${index}`} type="button" onClick={() => setPreviewPhoto(photo)}>{/* eslint-disable-next-line @next/next/no-img-element */}<img src={photo.url} alt={photo.name || '现场照片'} className="aspect-square w-full rounded-lg object-cover" /></button>)}</div> : <div className="mt-2 text-sm text-gray-400">未上传照片</div>}</div></div></td></tr>}
+              </Fragment>;
+            })}</tbody>
+          </table></div></div>
+          <div className="space-y-3 md:hidden">
             {filteredReports.map((report) => {
               const workerIds = parseStringArray(report.workers);
               const qualityChecks = parseStringArray(report.quality_checks);
@@ -651,6 +695,7 @@ export default function RecordsPage() {
               );
             })}
           </div>
+          </>
         ) : (
           <div className="space-y-4">
             <div className="rounded-xl border border-[#CFE0F5] bg-[#F4F8FD] px-3.5 py-3">
@@ -732,6 +777,10 @@ export default function RecordsPage() {
             <p className="text-gray-400">暂无施工记录</p>
           </div>
         )}
+        {pagination.total > 0 && <div className="mt-4 flex flex-col items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 text-sm text-gray-500 shadow-sm sm:flex-row">
+          <span>共 {pagination.total} 条，第 {pagination.page}/{pagination.totalPages} 页</span>
+          <div className="flex items-center gap-2"><label className="flex items-center gap-1 text-xs">每页<select value={pagination.pageSize} onChange={(event) => setPagination((current) => ({ ...current, page: 1, pageSize: Number(event.target.value) }))} className="rounded-lg border px-2 py-1.5"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select>条</label><button type="button" disabled={pagination.page <= 1} onClick={() => setPagination((current) => ({ ...current, page: current.page - 1 }))} className="rounded-lg border px-3 py-1.5 disabled:opacity-40">上一页</button><button type="button" disabled={pagination.page >= pagination.totalPages} onClick={() => setPagination((current) => ({ ...current, page: current.page + 1 }))} className="rounded-lg bg-[#1E5AA8] px-3 py-1.5 text-white disabled:opacity-40">下一页</button></div>
+        </div>}
       </div>
 
       {previewPhoto && <PhotoViewer photo={previewPhoto} onClose={() => setPreviewPhoto(null)} />}

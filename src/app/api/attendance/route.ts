@@ -11,6 +11,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get('projectId');
   const date = searchParams.get('date');
+  const dateFrom = searchParams.get('dateFrom');
+  const dateTo = searchParams.get('dateTo');
   if (!projectId) return NextResponse.json({ error: '缺少项目 ID' }, { status: 400 });
   const db = getDb();
   let sql = `SELECT a.*, w.name AS worker_name, w.team, w.role
@@ -18,6 +20,8 @@ export async function GET(request: Request) {
     WHERE a.project_id = ?`;
   const params: string[] = [projectId];
   if (date) { sql += ' AND a.date = ?'; params.push(date); }
+  if (dateFrom) { sql += ' AND a.date >= ?'; params.push(dateFrom); }
+  if (dateTo) { sql += ' AND a.date <= ?'; params.push(dateTo); }
   sql += ' ORDER BY a.date DESC, w.team, w.name';
   return NextResponse.json(db.prepare(sql).all(...params));
 }

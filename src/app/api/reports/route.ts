@@ -56,16 +56,56 @@ function parseWorkItems(input: unknown): WorkItem[] | null {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
   const projectId = searchParams.get('projectId');
   const date = searchParams.get('date');
+  const dateFrom = searchParams.get('dateFrom');
+  const dateTo = searchParams.get('dateTo');
   const workerId = searchParams.get('workerId');
+  const system = searchParams.get('system');
+  const keyword = searchParams.get('keyword')?.trim();
+  const submitter = searchParams.get('submitter')?.trim();
+  const external = searchParams.get('external');
+  const hasNotes = searchParams.get('hasNotes');
+  const latest = searchParams.get('latest') === '1';
+  const all = searchParams.get('all') === '1';
+  const requestedPage = Number(searchParams.get('page') || 1);
+  const requestedPageSize = Number(searchParams.get('pageSize') || 20);
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const pageSize = Number.isInteger(requestedPageSize) ? Math.min(100, Math.max(1, requestedPageSize)) : 20;
   const db = getDb();
+  if (id) {
+    const report = db.prepare('SELECT * FROM reports WHERE id = ?').get(id);
+    return report ? NextResponse.json(report) : NextResponse.json({ error: '记录不存在' }, { status: 404 });
+  }
   let query = 'SELECT * FROM reports WHERE 1=1';
-  const params: string[] = [];
+  const params: Array<string | number> = [];
   if (projectId) { query += ' AND project_id = ?'; params.push(projectId); }
   if (date) { query += ' AND date = ?'; params.push(date); }
+  if (dateFrom) { query += ' AND date >= ?'; params.push(dateFrom); }
+  if (dateTo) { query += ' AND date <= ?'; params.push(dateTo); }
   if (workerId) { query += ' AND workers LIKE ?'; params.push(`%"${workerId}"%`); }
-  return NextResponse.json(db.prepare(`${query} ORDER BY date DESC, created_at DESC`).all(...params));
+  if (system) { query += ' AND system = ?'; params.push(system); }
+  if (submitter) { query += ' AND submitter LIKE ?'; params.push(`%${submitter}%`); }
+  if (keyword) {
+    query += ` AND (location LIKE ? OR work_type LIKE ? OR work_items LIKE ? OR notes LIKE ? OR EXISTS (
+      SELECT 1 FROM workers w WHERE w.project_id = reports.project_id AND w.name LIKE ? AND reports.workers LIKE '%"' || w.id || '"%'
+    ))`;
+    const like = `%${keyword}%`;
+    params.push(like, like, like, like, like);
+  }
+  if (external === '1') query += ' AND work_items LIKE ?'; params.push(...(external === '1' ? ['%"external":true%'] : []));
+  if (hasNotes === '1') query += " AND (TRIM(COALESCE(notes, '')) <> '' OR TRIM(COALESCE(issue, '')) <> '')";
+  const order = ' ORDER BY date DESC, created_at DESC, id DESC';
+  if (latest) return NextResponse.json(db.prepare(`${query}${order} LIMIT 1`).get(...params) || null);
+  if (all) return NextResponse.json(db.prepare(`${query}${order}`).all(...params));
+
+  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) AS total');
+  const count = db.prepare(countQuery).get(...params) as { total: number };
+  const totalPages = Math.max(1, Math.ceil(count.total / pageSize));
+  const effectivePage = Math.min(page, totalPages);
+  const items = db.prepare(`${query}${order} LIMIT ? OFFSET ?`).all(...params, pageSize, (effectivePage - 1) * pageSize);
+  return NextResponse.json({ items, pagination: { page: effectivePage, pageSize, total: count.total, totalPages } });
 }
 
 interface ReportRecord {
@@ -389,7 +429,7 @@ async function saveReport(request: Request, editId: string | null) {
     summary: `${existing ? '修改' : '新增'}报工：${date}，${storedWorkItems.length}项施工内容，${selectedWorkers.length}人`,
     before: existing ? { date: existing.date, system: existing.system, workItems: oldItems, weather: existing.weather,
       notes: existing.notes, photoCount: oldPhotoCount } : undefined,
-    after: { date, system: data.system, workItems: readableItems, workers: selectedWorkers.map((workerId) => workerNames.get(workerId) || '已移除人员'),
+    after: { date, system: data.system, workItems: readableItems,
       weather: data.weather, notes: data.notes, photoCount: Array.isArray(data.photos) ? data.photos.length : 0 } });
 
   return NextResponse.json({ success: true, id, updated: !!existing });

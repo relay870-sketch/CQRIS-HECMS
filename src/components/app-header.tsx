@@ -19,6 +19,7 @@ function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/manage/systems')) return '子系统管理';
   if (pathname.startsWith('/manage/attendance')) return '考勤管理';
   if (pathname.startsWith('/manage/accounts')) return '账号管理';
+  if (pathname.startsWith('/manage/backups')) return '数据备份';
   if (pathname.startsWith('/project/')) return '项目详情';
   if (pathname.startsWith('/documents/')) return '文档预览';
   return '';
@@ -42,8 +43,8 @@ export function AppHeader() {
   }, []);
 
   return (
-    <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-[#1E5AA8] z-50 safe-area-top">
-      <div className="relative flex items-center justify-between h-12 px-3">
+    <header className="fixed top-0 left-1/2 z-[60] w-full max-w-[480px] -translate-x-1/2 bg-[#1E5AA8] safe-area-top md:max-w-none">
+      <div className="relative flex h-12 items-center justify-between px-3 md:px-6">
         {/* 左侧：项目选择器 */}
         <div className="flex items-center min-w-0">
           {!isHome && <ProjectSelector />}

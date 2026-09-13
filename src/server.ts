@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import next from 'next';
+import { ensureDailyBackup } from './lib/backups';
 
 // 未通过环境变量配置时，在 data 目录生成本机专属且持久化的会话密钥。
 if (!process.env.APP_SESSION_SECRET) {
@@ -44,5 +45,9 @@ app.prepare().then(() => {
         dev ? 'development' : process.env.COZE_PROJECT_ENV
       }`,
     );
+    if (!dev) {
+      void ensureDailyBackup().catch((error: unknown) => console.error('自动备份失败:', error));
+      setInterval(() => { void ensureDailyBackup().catch((error: unknown) => console.error('自动备份失败:', error)); }, 6 * 60 * 60 * 1000).unref();
+    }
   });
 });

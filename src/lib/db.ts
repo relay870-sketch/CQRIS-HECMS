@@ -28,6 +28,13 @@ export function getDb(): Database.Database {
   return db;
 }
 
+/** 在整库恢复前安全关闭连接；下次 getDb() 会重新打开并执行迁移。 */
+export function closeDb(): void {
+  if (!db) return;
+  db.close();
+  db = null;
+}
+
 /**
  * 增量迁移：为已存在的数据库补充新增列/数据
  */
@@ -473,9 +480,12 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_workers_project ON workers(project_id);
     CREATE INDEX IF NOT EXISTS idx_reports_project ON reports(project_id);
     CREATE INDEX IF NOT EXISTS idx_reports_date ON reports(date);
+    CREATE INDEX IF NOT EXISTS idx_reports_project_date_created ON reports(project_id, date DESC, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_reports_project_system_date ON reports(project_id, system, date DESC);
     CREATE INDEX IF NOT EXISTS idx_bom_project ON bom_items(project_id);
     CREATE INDEX IF NOT EXISTS idx_bom_adjustments_item ON bom_adjustments(bom_item_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_attendance_project_date ON daily_attendance(project_id, date);
+    CREATE INDEX IF NOT EXISTS idx_attendance_project_worker_date ON daily_attendance(project_id, worker_id, date DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_project_date ON audit_logs(project_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
     CREATE INDEX IF NOT EXISTS idx_knowledge_documents_project ON knowledge_documents(project_id);
