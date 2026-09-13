@@ -20,6 +20,7 @@ function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/manage/attendance')) return '考勤管理';
   if (pathname.startsWith('/manage/accounts')) return '账号管理';
   if (pathname.startsWith('/manage/backups')) return '数据备份';
+  if (pathname.startsWith('/manage/ai')) return 'AI 配置';
   if (pathname.startsWith('/project/')) return '项目详情';
   if (pathname.startsWith('/documents/')) return '文档预览';
   return '';

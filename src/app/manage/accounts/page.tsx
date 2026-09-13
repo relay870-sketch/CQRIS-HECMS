@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Ban, Check, Clock3, Plus, ShieldCheck, ShieldOff, UserRound, UserX } from 'lucide-react';
+import { ManagePageHeader } from '@/components/manage-page-header';
 
 interface Account {
   id: string;
@@ -81,7 +82,9 @@ export default function AccountManagementPage() {
     finally { setSavingId(''); }
   };
 
-  return <div className="min-h-screen bg-[#F5F6F8] px-4 py-4 pb-24">
+  return <div className="min-h-screen bg-[#F5F6F8] pb-24">
+    <ManagePageHeader title="账号审核与管理" description="审核注册账号、分配权限与管理登录安全" />
+    <main className="mx-auto max-w-5xl p-4">
     <div className="rounded-2xl bg-white p-4 shadow-sm">
       <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-[#1E5AA8]" /><h1 className="font-semibold">账号审核与管理</h1></div>
       <p className="mt-1.5 text-xs leading-5 text-gray-400">新注册账号需审核后才能登录。报工人员可提交日报，只读人员只能查看。</p>
@@ -125,5 +128,6 @@ export default function AccountManagementPage() {
         </div>
       ))}
     </div>
+    </main>
   </div>;
 }

@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { defaultAiAbilities, type AiAbilities } from '@/lib/ai-settings';
 
 interface DateRange { start: string; end: string; label: string }
 interface ReportRow { date: string; location: string; work_type: string; quantity: number; unit: string; workers: string; weather: string | null; issue: string | null; notes: string | null; work_items: string | null; system: string | null }
@@ -18,7 +19,7 @@ export function inferDateRange(question: string, now = new Date()): DateRange {
   if (/今天|今日|当天/.test(question)) return { start: today, end: today, label: '今天' };
   if (/上周/.test(question)) { const end = addDays(startOfWeek(now), -1); const start = addDays(end, -6); return { start: dateString(start), end: dateString(end), label: '上周' }; }
   if (/本周|这周/.test(question)) return { start: dateString(startOfWeek(now)), end: today, label: '本周' };
-  if (/上月/.test(question)) return monthRange(new Date(now.getFullYear(), now.getMonth() - 1, 1), '上月');
+  if (/上月|上个月/.test(question)) return monthRange(new Date(now.getFullYear(), now.getMonth() - 1, 1), '上月');
   if (/本月|这个月/.test(question)) { const range = monthRange(now, '本月'); return { ...range, end: today }; }
   const recent = question.match(/最近\s*(\d{1,3})\s*天/); const days = recent ? Math.min(90, Math.max(1, Number(recent[1]))) : 7;
   return { start: dateString(addDays(now, 1 - days)), end: today, label: `最近${days}天` };
@@ -31,16 +32,16 @@ function parseItems(row: ReportRow): WorkItem[] {
 function workerIds(value: unknown): string[] { return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []; }
 function parseWorkerJson(value: string): string[] { try { return workerIds(JSON.parse(value || '[]')); } catch { return []; } }
 
-export function buildProjectDataContext(question: string, projectId: string): string {
+export function buildProjectDataContext(question: string, projectId: string, abilities: AiAbilities = defaultAiAbilities): string {
   if (!projectId) return '';
   const db = getDb();
   const project = db.prepare('SELECT id, name, section, status, start_date, end_date, manager, progress FROM projects WHERE id = ?').get(projectId) as { id: string; name: string; section: string; status: string; start_date: string; end_date: string; manager: string; progress: number } | undefined;
   if (!project) return '';
   const broad = /日报|汇总|概况|情况|分析|统计|总结|风险|提醒/.test(question);
   const wantsProject = broad || /项目|负责人|工期|状态|总进度/.test(question);
-  const wantsBom = broad || /清单|进度|工程量|合同额|单价|子目|未开始|未完成|超量|滞后/.test(question);
-  const wantsAttendance = broad || /考勤|出勤|人员|谁|加班|半天|未出勤/.test(question);
-  const wantsReports = broad || /施工|报工|记录|日报|今天|昨日|昨天|位置|桩号|天气|合同外|异常|现场说明|干了|完成了/.test(question);
+  const wantsBom = (abilities.progressAnalysis || abilities.anomalyAnalysis) && (broad || /清单|进度|工程量|合同额|单价|子目|未开始|未完成|超量|滞后/.test(question));
+  const wantsAttendance = abilities.attendanceAnalysis && (broad || /考勤|出勤|人员|谁|加班|半天|未出勤/.test(question));
+  const wantsReports = (abilities.dailyReport || abilities.anomalyAnalysis) && (broad || /施工|报工|记录|日报|今天|昨日|昨天|位置|桩号|天气|合同外|异常|现场说明|干了|完成了/.test(question));
   if (!wantsProject && !wantsBom && !wantsAttendance && !wantsReports) return '';
   const range = inferDateRange(question);
   const sections: string[] = [`【项目数据查询范围】项目：${project.name}；时间：${range.label}（${range.start}至${range.end}）；查询生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`];

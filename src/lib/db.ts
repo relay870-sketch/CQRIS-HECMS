@@ -466,6 +466,27 @@ function initSchema(db: Database.Database): void {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
+    -- 系统级配置（敏感值由业务层加密后保存）
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS ai_usage_logs (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      profile_id TEXT,
+      model TEXT NOT NULL,
+      task_type TEXT NOT NULL,
+      success INTEGER NOT NULL,
+      fallback_used INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage_logs(created_at);
+
     -- 项目子系统表（如 收费系统/监控系统/通信系统/供配电系统/隧道监控 等）
     CREATE TABLE IF NOT EXISTS project_systems (
       id TEXT PRIMARY KEY,

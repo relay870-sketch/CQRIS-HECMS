@@ -1,10 +1,12 @@
 import { NextRequest } from 'next/server';
 import { LLMClient, KnowledgeClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { isCozeApiConfigured } from '@/lib/storage';
-import { completeChat, getLlmConfig, streamChat, type LlmConfig, type LlmMessage } from '@/lib/llm';
+import { completeChat, getLlmRuntimePlan, streamChat, type LlmConfig, type LlmMessage } from '@/lib/llm';
 import { buildProjectDataContext } from '@/lib/ai-project-context';
 import { getDb } from '@/lib/db';
 import { writeAuditLog } from '@/lib/audit';
+import { readAiPreferences } from '@/lib/ai-settings';
+import { recordAiUsage } from '@/lib/ai-usage';
 import {
   searchKnowledge,
   getProjectName,
@@ -105,11 +107,12 @@ export async function POST(request: NextRequest) {
     }
 
     const pid = typeof projectId === 'string' ? projectId : '';
+    const aiPreferences = readAiPreferences();
     if (pid && !getDb().prepare('SELECT 1 FROM projects WHERE id = ?').get(pid)) {
       return new Response(JSON.stringify({ error: '当前项目不存在或已被删除' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
     }
-    const projectMemoryText = pid ? getProjectMemoryText(pid) : '';
-    const projectDataText = pid ? buildProjectDataContext(message.trim(), pid) : '';
+    const projectMemoryText = pid && aiPreferences.memoryEnabled ? getProjectMemoryText(pid) : '';
+    const projectDataText = pid ? buildProjectDataContext(message.trim(), pid, aiPreferences.abilities) : '';
     if (projectDataText) {
       void writeAuditLog(getDb(), request, { projectId: pid, module: 'system', action: 'ai_query', entityType: '项目数据', summary: 'AI 只读查询项目、清单、考勤或施工记录数据' });
     }
@@ -125,14 +128,14 @@ export async function POST(request: NextRequest) {
       let contextText = '';
 
       try {
-        const searchResponse = await knowledgeClient.search(
+        const searchResponse = aiPreferences.abilities.knowledgeQa ? await knowledgeClient.search(
           message.trim(),
           undefined,
           5,
           0.2
-        );
+        ) : null;
 
-        if (searchResponse.code === 0 && searchResponse.chunks && searchResponse.chunks.length > 0) {
+        if (searchResponse?.code === 0 && searchResponse.chunks && searchResponse.chunks.length > 0) {
           contextText = searchResponse.chunks
             .map((chunk, idx) => `[参考资料${idx + 1}]\n${chunk.content}`)
             .join('\n\n');
@@ -146,12 +149,13 @@ export async function POST(request: NextRequest) {
 
 请遵循以下规则：
 1. 项目统计和事实必须基于“项目实时数据”，技术问题优先基于“参考资料”；没有数据时如实告知，禁止编造
-2. 回答要简洁、专业、实用，适合施工现场人员阅读
+2. 回答要专业、实用，适合施工现场人员阅读；详细程度为${aiPreferences.responseStyle === 'concise' ? '简洁' : aiPreferences.responseStyle === 'detailed' ? '详细' : '标准'}
 3. 涉及安全规范的问题要特别强调安全注意事项
-4. 每个项目统计结论必须注明时间范围，并引用[项目数据1-4]；引用文档时注明[参考资料编号]
+4. ${aiPreferences.showSources ? '每个项目统计结论必须注明时间范围，并引用[项目数据1-4]；引用文档时注明[参考资料编号]' : '保留必要的统计时间范围，无需显示内部资料编号'}
 5. “人·小时”表示人数乘以每人加班小时，不得误写成普通小时
 6. 系统进度与按合同金额计算进度不一致时，分别说明口径
 7. 如果问题不清晰，请主动询问以获取更多信息
+${aiPreferences.customInstructions ? `8. 管理员自定义要求：${aiPreferences.customInstructions}` : ''}
 
 ${projectMemoryText ? `【项目长期记忆】\n${projectMemoryText}\n` : ''}
 ${projectDataText ? `【项目实时数据】\n${projectDataText}\n` : ''}
@@ -201,12 +205,13 @@ ${contextText ? `【知识库参考资料】\n${contextText}` : '当前没有匹
     }
 
     // ---------- 本地智能体模式：检索知识库 + 查日报 + OpenAI 兼容 LLM ----------
-    const llm = getLlmConfig();
-    if (!llm) {
+    const runtimePlan = getLlmRuntimePlan();
+    if (!runtimePlan) {
       return sseResponse([{
         content: '尚未配置大模型 API Key，暂时无法进行 AI 问答。\n\n配置方法：在项目根目录的 `.env.local` 文件中添加：\n\nLLM_API_KEY=你的API密钥\nLLM_BASE_URL=https://api.deepseek.com/v1  （可选，默认 DeepSeek）\nLLM_MODEL=deepseek-chat  （可选）\n\nDeepSeek / 豆包 / 通义 / 硅基流动等 OpenAI 兼容服务都可以。配置完成后重启服务即可使用。\n\n在此之前，您可以使用「智能搜索」查找文档内容。',
       }]);
     }
+    const llm = runtimePlan.primary;
 
     const pname =
       (pid ? getProjectName(pid) : '') ||
@@ -214,7 +219,7 @@ ${contextText ? `【知识库参考资料】\n${contextText}` : '当前没有匹
       '当前项目';
 
     // Step 1: 按项目自动检索本地知识库
-    const knowledgeText = searchKnowledge(message, pid, 4);
+    const knowledgeText = aiPreferences.abilities.knowledgeQa ? searchKnowledge(message, pid, 4) : '';
 
     // Step 2: 构建 system prompt（带知识资料、长期记忆和按需查询的项目实时数据）
     const systemPrompt = `你是重庆瑞思施工管理系统（${pname}）的团队智能助手。你的职责：解答施工技术问题、查询项目资料、整理施工日报和记录。
@@ -224,11 +229,15 @@ ${contextText ? `【知识库参考资料】\n${contextText}` : '当前没有匹
 2. 回答要简洁、专业、实用，适合施工现场人员阅读
 3. 涉及安全规范的问题要特别强调安全注意事项
 4. 引用资料时注明文档名称或资料编号
-5. 每个项目统计结论注明时间范围，并引用[项目数据1-4]；引用资料时注明[资料编号]
+5. ${aiPreferences.showSources ? '每个项目统计结论注明时间范围，并引用[项目数据1-4]；引用资料时注明[资料编号]' : '回答中保留必要的统计时间范围，但无需显示内部资料编号'}
 6. 整理日报时按日期和施工位置列出内容，统计出勤、加班人·小时、合同外施工与现场说明
 7. “人·小时”是人数乘以每人加班小时；系统进度与合同金额进度口径不同时分别说明
+7.1 用户问出勤时，${aiPreferences.attendanceMetric === 'headcount' ? '优先回答去重出勤人数，并补充必要的人天信息' : aiPreferences.attendanceMetric === 'personDays' ? '优先回答累计出勤人天，并补充必要的去重人数' : '同时回答去重出勤人数和累计出勤人天'}，避免把人数与人天混为一谈
 8. 只能读取和分析数据，不能声称已经修改、删除或新增系统记录
 9. 如果问题与提供的资料无关（如闲聊），可以正常回答
+10. 回答详细程度：${aiPreferences.responseStyle === 'concise' ? '简洁，优先直接给结论' : aiPreferences.responseStyle === 'detailed' ? '详细，说明口径、明细和建议' : '标准，先给结论再给必要说明'}
+${aiPreferences.customInstructions ? `11. 管理员自定义要求：${aiPreferences.customInstructions}` : ''}
+12. 当前启用的能力模块：${Object.entries(aiPreferences.abilities).filter(([, enabled]) => enabled).map(([name]) => name).join('、') || '无'}；未启用模块不得声称已查询对应数据
 
 ${projectMemoryText ? `【项目长期记忆】\n${projectMemoryText}\n` : ''}
 ${knowledgeText ? `【知识库参考资料】\n${knowledgeText}` : ''}
@@ -256,21 +265,35 @@ ${projectDataText ? `\n【项目实时数据】\n${projectDataText}` : ''}`;
     const readableStream = new ReadableStream({
       async start(controller) {
         let assistantContent = '';
+        let activeLlm = llm;
+        let fallbackUsed = false;
+        const startedAt = Date.now();
         try {
-          for await (const delta of streamChat(messages, llm)) {
-            assistantContent += delta;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: delta })}\n\n`));
+          try {
+            for await (const delta of streamChat(messages, activeLlm)) { assistantContent += delta; controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: delta })}\n\n`)); }
+          } catch (primaryError) {
+            if (!runtimePlan.fallback || assistantContent) throw primaryError;
+            recordAiUsage({ projectId: pid, profileId: activeLlm.profileId, model: activeLlm.model, taskType: 'chat', success: false, durationMs: Date.now() - startedAt, error: primaryError instanceof Error ? primaryError.message : '主模型调用失败' });
+            activeLlm = runtimePlan.fallback; fallbackUsed = true;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: '主模型暂时不可用，已自动切换备用模型。\n\n' })}\n\n`));
+            for await (const delta of streamChat(messages, activeLlm)) { assistantContent += delta; controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: delta })}\n\n`)); }
           }
             saveChatMessage(pid, 'assistant', assistantContent);
+            recordAiUsage({ projectId: pid, profileId: activeLlm.profileId, model: activeLlm.model, taskType: 'chat', success: true, fallbackUsed, durationMs: Date.now() - startedAt });
             controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             controller.close();
             try {
-              await refreshProjectMemory(pid, message.trim(), assistantContent, llm);
+              if (aiPreferences.memoryEnabled) {
+                const memoryLlm = runtimePlan.fallback || activeLlm; const memoryStarted = Date.now();
+                try { await refreshProjectMemory(pid, message.trim(), assistantContent, memoryLlm); recordAiUsage({ projectId: pid, profileId: memoryLlm.profileId, model: memoryLlm.model, taskType: 'memory', success: true, fallbackUsed: memoryLlm === runtimePlan.fallback, durationMs: Date.now() - memoryStarted }); }
+                catch (memoryError) { recordAiUsage({ projectId: pid, profileId: memoryLlm.profileId, model: memoryLlm.model, taskType: 'memory', success: false, durationMs: Date.now() - memoryStarted, error: memoryError instanceof Error ? memoryError.message : '记忆整理失败' }); throw memoryError; }
+              }
             } catch (memoryError) {
               console.error('Project memory refresh error:', memoryError);
             }
         } catch (error) {
           console.error('Chat stream error:', error);
+          recordAiUsage({ projectId: pid, profileId: activeLlm.profileId, model: activeLlm.model, taskType: 'chat', success: false, fallbackUsed, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : '未知错误' });
           const msg = error instanceof Error ? error.message : '未知错误';
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ error: `生成失败：${msg}` })}\n\n`),

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useProject } from '@/components/project-provider';
 import { MapPin, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ManagePageHeader } from '@/components/manage-page-header';
 
 interface LocationItem {
   id: string | null;
@@ -100,15 +101,9 @@ export default function ManageLocationsPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6F8] pb-8">
-      {/* Header */}
-      <div className="bg-white px-4 py-3 border-b border-gray-100">
-        <h1 className="text-lg font-semibold text-[#1A1A2E] text-center">桩号管理</h1>
-        <p className="text-xs text-gray-400 text-center mt-0.5">
-          {currentProject.name} · 已录入 {managedCount} 个，共 {locations.length} 个可选
-        </p>
-      </div>
+      <ManagePageHeader title="桩号管理" description={`${currentProject.name} · 已录入 ${managedCount} 个，共 ${locations.length} 个可选`} />
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="mx-auto max-w-5xl space-y-4 px-4 py-4">
         {/* 添加单个 */}
         <div className="bg-white rounded-xl p-4 shadow-sm">
           <label className="flex items-center gap-1 text-sm font-medium text-[#1A1A2E] mb-2">

@@ -1,3 +1,5 @@
+import { readStoredAiConfig, readStoredAiSettings } from '@/lib/ai-settings';
+
 /**
  * OpenAI 兼容接口的大模型调用封装。
  * 通过环境变量配置（.env.local）：
@@ -13,6 +15,8 @@ export interface LlmConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  profileId?: string;
+  profileName?: string;
 }
 
 export interface LlmMessage {
@@ -22,6 +26,8 @@ export interface LlmMessage {
 
 /** 读取 LLM 配置；未配置 LLM_API_KEY 时返回 null */
 export function getLlmConfig(): LlmConfig | null {
+  const stored = readStoredAiConfig();
+  if (stored) return { ...stored, baseUrl: stored.baseUrl.replace(/\/+$/, '') };
   const apiKey = process.env.LLM_API_KEY;
   if (!apiKey) return null;
   return {
@@ -29,6 +35,14 @@ export function getLlmConfig(): LlmConfig | null {
     baseUrl: (process.env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/+$/, ''),
     model: process.env.LLM_MODEL || 'deepseek-chat',
   };
+}
+
+export function getLlmRuntimePlan(): { primary: LlmConfig; fallback: LlmConfig | null } | null {
+  const settings = readStoredAiSettings();
+  if (!settings) { const primary = getLlmConfig(); return primary ? { primary, fallback: null } : null; }
+  const map = (id: string | null): LlmConfig | null => { const profile = settings.profiles.find((item) => item.id === id); return profile ? { apiKey: profile.apiKey, baseUrl: profile.baseUrl.replace(/\/+$/, ''), model: profile.model, profileId: profile.id, profileName: profile.name } : null; };
+  const primary = map(settings.activeProfileId);
+  return primary ? { primary, fallback: map(settings.fallbackProfileId) } : null;
 }
 
 /** 流式调用 Chat Completions，逐段产出增量文本 */

@@ -1,13 +1,13 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import * as XLSX from 'xlsx';
-import { ArrowLeft, ChevronDown, Download, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, Download, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
 import { formatStoredAuditData } from '@/lib/audit-format';
+import { ManagePageHeader } from '@/components/manage-page-header';
 
 interface AuditLog {
-  id: string; project_id: string | null; module: string; action: string; entity_type: string;
+  id: string; project_id: string | null; project_name: string | null; module: string; action: string; entity_type: string;
   entity_id: string | null; detail: string; operator: string; result: string; ip_address: string | null;
   user_agent: string | null; before_data: string | null; after_data: string | null; created_at: string;
   device_type: string | null; browser: string | null;
@@ -45,9 +45,18 @@ export default function AuditLogsPage() {
   useEffect(() => { fetch('/api/audit-logs?summary=1').then((response) => response.json()).then((data: AuditSummary) => setSummary(data)).catch(() => setSummary(null)); }, []);
   const activeFilterCount = [projectId, module, action, result, keyword, start, end].filter(Boolean).length;
   const clearFilters = () => { setProjectId(''); setModule(''); setAction(''); setResult(''); setKeyword(''); setStart(''); setEnd(''); };
+  const getProjectName = (log: AuditLog): string => log.project_name || (log.project_id ? `已删除项目（${log.project_id}）` : '');
+  const getShortProjectName = (log: AuditLog): string => {
+    if (!log.project_id) return '';
+    if (!log.project_name) return '已删除项目';
+    return log.project_name
+      .replace(/(?:高速公路|高速)?机电(?:安装)?工程.*$/, '')
+      .replace(/施工(?:总承包)?项目.*$/, '')
+      .trim() || log.project_name;
+  };
 
   const exportLogs = () => {
-    const rows = logs.map((log) => ({ 时间: log.created_at, 操作人: log.operator, 模块: moduleNames[log.module] || log.module,
+    const rows = logs.map((log) => ({ 时间: log.created_at, 项目: getProjectName(log), 操作人: log.operator, 模块: moduleNames[log.module] || log.module,
       操作: actionNames[log.action] || log.action, 对象: log.entity_type, 摘要: log.detail,
       结果: log.result === 'success' ? '成功' : '失败', IP: log.ip_address || '' }));
     const book = XLSX.utils.book_new();
@@ -68,11 +77,7 @@ export default function AuditLogsPage() {
   };
 
   return <div className="min-h-screen bg-[#F5F6F8] pb-8">
-    <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-3 py-3">
-      <Link href="/profile" className="rounded-lg p-2"><ArrowLeft className="h-5 w-5" /></Link>
-      <div className="flex-1"><h1 className="font-semibold">系统操作日志</h1><p className="text-xs text-gray-400">重要数据操作与修改记录</p></div>
-      <button onClick={exportLogs} className="flex items-center gap-1 rounded-lg bg-[#1E5AA8] px-3 py-2 text-xs text-white"><Download className="h-3.5 w-3.5" />导出</button>
-    </header>
+    <ManagePageHeader title="系统操作日志" description="重要数据操作与修改记录" action={<button onClick={exportLogs} className="flex items-center gap-1 rounded-lg bg-[#1E5AA8] px-3 py-2 text-xs text-white"><Download className="h-3.5 w-3.5" />导出</button>} />
     <main className="mx-auto max-w-5xl space-y-3 p-4">
       {summary && <section className={`rounded-xl border p-3 ${summary.riskLevel === 'high' ? 'border-red-200 bg-red-50' : summary.riskLevel === 'medium' ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
         <div className="text-sm font-semibold">安全与异常提醒</div>
@@ -100,22 +105,22 @@ export default function AuditLogsPage() {
         </div>}
       </section>
       {loading ? <div className="py-16 text-center text-sm text-gray-400">加载中…</div> : logs.length === 0 ? <div className="py-16 text-center text-sm text-gray-400">暂无操作日志</div> : <>
-        <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block"><div className="overflow-x-auto"><table className="w-full min-w-[960px] table-fixed text-left text-sm">
-          <thead className="bg-gray-50 text-xs text-gray-500"><tr><th className="w-40 px-4 py-3">时间</th><th className="w-24 px-3 py-3">操作人</th><th className="w-28 px-3 py-3">模块</th><th className="w-24 px-3 py-3">操作</th><th className="px-3 py-3">摘要</th><th className="w-20 px-3 py-3">结果</th><th className="w-20 px-4 py-3 text-right">详情</th></tr></thead>
+        <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block"><table className="w-full table-fixed text-left text-sm">
+          <thead className="bg-gray-50 text-xs text-gray-500"><tr><th className="w-36 px-4 py-3">时间</th><th className="w-20 px-2 py-3">操作人</th><th className="w-64 px-2 py-3">操作信息</th><th className="px-3 py-3">摘要</th><th className="w-16 px-2 py-3">结果</th><th className="w-16 px-3 py-3 text-right">详情</th></tr></thead>
           <tbody className="divide-y divide-gray-100">{logs.map((log) => {
             const beforeDetails = supplementaryDetails(log.before_data, log); const afterDetails = supplementaryDetails(log.after_data, log);
-            return <Fragment key={log.id}><tr className="hover:bg-blue-50/30"><td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">{log.created_at}</td><td className="px-3 py-3 font-medium text-gray-900">{log.operator}</td><td className="px-3 py-3"><span className="rounded bg-gray-100 px-2 py-1 text-xs">{moduleNames[log.module] || log.module}</span></td><td className="px-3 py-3 text-gray-600">{actionNames[log.action] || log.action}</td><td className="truncate px-3 py-3 text-gray-600" title={log.detail}>{log.detail}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs ${log.result === 'success' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>{log.result === 'success' ? '成功' : '失败'}</span></td><td className="px-4 py-3 text-right"><button onClick={() => setExpanded(expanded === log.id ? null : log.id)} className="rounded-lg px-2 py-1 text-xs text-[#1E5AA8] hover:bg-blue-50">{expanded === log.id ? '收起' : '查看'}</button></td></tr>
-              {expanded === log.id && <tr><td colSpan={7} className="bg-gray-50 px-6 py-4"><div className="grid gap-3 lg:grid-cols-2">{beforeDetails && <div><b className="text-xs">修改前</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs leading-5 text-gray-600">{beforeDetails}</div></div>}{afterDetails && <div><b className="text-xs">修改后</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs leading-5 text-gray-600">{afterDetails}</div></div>}</div><div className="mt-2 text-xs text-gray-400">IP：{log.ip_address || '—'} · {log.device_type || '未知设备'} · {log.browser || '未知浏览器'}</div></td></tr>}
+            return <Fragment key={log.id}><tr className="hover:bg-blue-50/30"><td className="whitespace-nowrap px-4 py-3 align-top text-xs text-gray-500">{log.created_at}</td><td className="break-words px-2 py-3 align-top font-medium text-gray-900">{log.operator}</td><td className="px-2 py-3 align-top"><div className="flex flex-wrap items-center gap-1"><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{moduleNames[log.module] || log.module}</span><span className="text-xs text-gray-500">{actionNames[log.action] || log.action}</span>{log.project_id && <span className="rounded bg-[#E8F0FE] px-1.5 py-0.5 text-[11px] font-medium text-[#1E5AA8]" title={getProjectName(log)}>{getShortProjectName(log)}</span>}</div></td><td className="break-words px-3 py-3 align-top leading-5 text-gray-600">{log.detail}</td><td className="px-2 py-3 align-top"><span className={`rounded-full px-1.5 py-1 text-xs ${log.result === 'success' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>{log.result === 'success' ? '成功' : '失败'}</span></td><td className="px-3 py-3 text-right align-top"><button onClick={() => setExpanded(expanded === log.id ? null : log.id)} className="rounded-lg px-1.5 py-1 text-xs text-[#1E5AA8] hover:bg-blue-50">{expanded === log.id ? '收起' : '查看'}</button></td></tr>
+              {expanded === log.id && <tr><td colSpan={6} className="bg-gray-50 px-6 py-4"><div className="grid gap-3 lg:grid-cols-2">{beforeDetails && <div><b className="text-xs">修改前</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs leading-5 text-gray-600">{beforeDetails}</div></div>}{afterDetails && <div><b className="text-xs">修改后</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs leading-5 text-gray-600">{afterDetails}</div></div>}</div><div className="mt-2 text-xs text-gray-400">{log.project_id && <>项目：{getProjectName(log)} · </>}IP：{log.ip_address || '—'} · {log.device_type || '未知设备'} · {log.browser || '未知浏览器'}</div></td></tr>}
             </Fragment>;
           })}</tbody>
-        </table></div></div>
+        </table></div>
         <div className="space-y-2 md:hidden">{logs.map((log) => {
           const beforeDetails = supplementaryDetails(log.before_data, log);
           const afterDetails = supplementaryDetails(log.after_data, log);
           return <article key={log.id} className="rounded-xl bg-white shadow-sm">
           <button onClick={() => setExpanded(expanded === log.id ? null : log.id)} className="flex w-full items-start gap-3 p-3.5 text-left">
             <div className={`mt-0.5 rounded-lg p-2 ${log.result === 'success' ? 'bg-[#E8F0FE] text-[#1E5AA8]' : 'bg-red-50 text-red-500'}`}><ShieldCheck className="h-4 w-4"/></div>
-            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5 text-sm"><b>{log.operator}</b><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{moduleNames[log.module] || log.module}</span><span className="text-gray-500">{actionNames[log.action] || log.action}</span></div><p className="mt-1 break-words text-sm text-gray-600">{log.detail}</p><p className="mt-1 text-xs text-gray-400">{log.created_at}</p></div><ChevronDown className={`h-4 w-4 text-gray-300 transition ${expanded === log.id ? 'rotate-180' : ''}`}/>
+            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5 text-sm"><b>{log.operator}</b><span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{moduleNames[log.module] || log.module}</span><span className="text-gray-500">{actionNames[log.action] || log.action}</span>{log.project_id && <span className="rounded bg-[#E8F0FE] px-1.5 py-0.5 text-[11px] font-medium text-[#1E5AA8]" title={getProjectName(log)}>{getShortProjectName(log)}</span>}</div><p className="mt-1 break-words text-sm text-gray-600">{log.detail}</p><p className="mt-1 text-xs text-gray-400">{log.created_at}</p></div><ChevronDown className={`h-4 w-4 text-gray-300 transition ${expanded === log.id ? 'rotate-180' : ''}`}/>
           </button>
           {expanded === log.id && <div className="space-y-2 border-t px-4 py-3 text-xs text-gray-600">
             {beforeDetails && <div><b>修改前</b><div className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2 leading-5">{beforeDetails}</div></div>}

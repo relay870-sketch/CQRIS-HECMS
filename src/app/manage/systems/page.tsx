@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useProject } from '@/components/project-provider';
 import { Layers, Plus, Trash2, Check } from 'lucide-react';
+import { ManagePageHeader } from '@/components/manage-page-header';
 
 const QUICK_SYSTEMS = [
   '收费系统', '监控系统', '通信系统', '供配电系统',
@@ -80,15 +81,9 @@ export default function ManageSystemsPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6F8] pb-8">
-      {/* Header */}
-      <div className="bg-white px-4 py-3 border-b border-gray-100">
-        <h1 className="text-lg font-semibold text-[#1A1A2E] text-center">子系统管理</h1>
-        <p className="text-xs text-gray-400 text-center mt-0.5">
-          {currentProject.name} · 每个子系统对应独立的工程量清单
-        </p>
-      </div>
+      <ManagePageHeader title="子系统管理" description={`${currentProject.name} · 每个子系统对应独立的工程量清单`} />
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="mx-auto max-w-5xl space-y-4 px-4 py-4">
         {/* 当前系统 */}
         <div className="bg-white rounded-xl p-4 shadow-sm">
           <label className="flex items-center gap-1 text-sm font-medium text-[#1A1A2E] mb-2">

@@ -231,21 +231,6 @@ export default function RecordsPage() {
     }
   };
 
-  const parseWorkItemsForExport = (report: Report): string => {
-    if (!report.work_items) {
-      return `${report.work_type} ${report.quantity}${report.unit}`;
-    }
-    try {
-      const items = JSON.parse(report.work_items) as WorkItemDetail[];
-      if (Array.isArray(items) && items.length > 0) {
-        return items.map((it) => `${it.name} ${it.quantity}${it.unit}`).join('；');
-      }
-    } catch {
-      // 忽略
-    }
-    return `${report.work_type} ${report.quantity}${report.unit}`;
-  };
-
   const getAttendanceDetails = (report: Report) => {
     const reportWorkerIds = parseStringArray(report.workers);
     const items = parseWorkItems(report.work_items);
@@ -297,40 +282,48 @@ export default function RecordsPage() {
       toast.info('没有符合条件的数据可导出');
       return;
     }
-    const parseNature = (r: Report): string => {
-      if (!r.work_items) return '全天';
-      try {
-        const items = JSON.parse(r.work_items) as Array<{ attendance?: string; overtimeHours?: number; external?: boolean }>;
-        if (Array.isArray(items) && items.length > 0) {
-          return items.map((it) => {
-            const parts: string[] = [];
-            if (it.attendance === 'half') parts.push('半天');
-            else if (it.attendance === 'full') parts.push('全天');
-            if ((it.overtimeHours || 0) > 0) parts.push(`加班${it.overtimeHours}h`);
-            if (it.external) parts.push('合同外');
-            return parts.length > 0 ? parts.join('/') : '—';
-          }).join('、');
-        }
-      } catch {
-        // 忽略
-      }
-      return '全天';
+    const formatNature = (item: WorkItemDetail): string => {
+      const parts: string[] = [];
+      if (item.attendance === 'half') parts.push('半天');
+      else if (item.attendance === 'none') parts.push('不计考勤');
+      else parts.push('全天');
+      if ((item.overtimeHours || 0) > 0) parts.push(`加班${item.overtimeHours}小时`);
+      if (item.external) parts.push('合同外');
+      return parts.join('/') || '—';
     };
 
-    const rows = list.map((r) => ({
-      '日期': r.date,
-      '系统': r.system || '',
-      '桩号/位置': r.location,
-      '施工内容': parseWorkItemsForExport(r),
-      '性质': parseNature(r),
-      '参与人员': parseWorkerIds(r.workers).map(getWorkerName).join('、'),
-      '天气': r.weather || '',
-      '现场说明': r.notes || '',
-      '提交人': getSubmitterName(r.submitter),
-    }));
+    const rows = list.flatMap((report) => {
+      const reportWorkerIds = parseWorkerIds(report.workers);
+      const parsedItems = parseWorkItems(report.work_items);
+      const items: WorkItemDetail[] = parsedItems.length > 0 ? parsedItems : [{
+        name: report.work_type,
+        quantity: report.quantity,
+        unit: report.unit,
+        location: report.location,
+        attendance: 'full',
+        workers: reportWorkerIds,
+      }];
+
+      return items.map((item) => {
+        const workerIds = item.workers && item.workers.length > 0 ? item.workers : reportWorkerIds;
+        return {
+          '日期': report.date,
+          '系统': report.system || '',
+          '施工内容': item.name,
+          '数量': item.quantity,
+          '单位': item.unit,
+          '桩号/位置': item.location || report.location || '',
+          '性质': formatNature(item),
+          '参与人员': workerIds.map(getWorkerName).join('、'),
+          '天气': report.weather || '',
+          '现场说明': report.notes || '',
+          '提交人': getSubmitterName(report.submitter),
+        };
+      });
+    });
     const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [
-      { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 40 }, { wch: 12 }, { wch: 18 }, { wch: 8 }, { wch: 24 }, { wch: 10 },
+      { wch: 12 }, { wch: 12 }, { wch: 28 }, { wch: 10 }, { wch: 8 }, { wch: 28 }, { wch: 16 }, { wch: 32 }, { wch: 10 }, { wch: 28 }, { wch: 12 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '施工记录');

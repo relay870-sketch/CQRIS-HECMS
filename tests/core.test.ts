@@ -76,4 +76,5 @@ test('AI 项目查询能识别明确日期和最近天数', () => {
   const now = new Date('2026-09-13T02:00:00.000Z');
   assert.deepEqual(inferDateRange('查询2026年9月8日到2026年9月12日施工记录', now), { start: '2026-09-08', end: '2026-09-12', label: '2026-09-08至2026-09-12' });
   assert.deepEqual(inferDateRange('最近3天谁加班最多', now), { start: '2026-09-11', end: '2026-09-13', label: '最近3天' });
+  assert.deepEqual(inferDateRange('上个月出勤多少个工', now), { start: '2026-08-01', end: '2026-08-31', label: '上月' });
 });

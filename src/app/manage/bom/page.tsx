@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, Suspense, useRef } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Edit2, Trash2, X, Check, Upload, Download, FileSpreadsheet } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, Upload, Download, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { ManagePageHeader } from '@/components/manage-page-header';
 
 interface BomItem {
   id: string;
@@ -38,7 +39,6 @@ interface Adjustment { id: string; before_qty: number; after_qty: number; delta_
 
 function BomManagement() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const projectId = searchParams.get('projectId');
 
   const [project, setProject] = useState<Project | null>(null);
@@ -417,16 +417,7 @@ function BomManagement() {
 
   return (
     <div className="min-h-screen bg-[#F5F6F8] pb-20">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 safe-area-top">
-        <button onClick={() => router.back()} className="p-1">
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-lg font-bold text-[#1A1A2E]">工程量清单</h1>
-          {project && <p className="text-xs text-gray-400">{project.name}</p>}
-        </div>
-        <div className="flex items-center gap-2">
+      <ManagePageHeader title="工程量清单" description={project?.name || '项目清单管理'} backHref="/manage/projects" action={<div className="flex items-center gap-1.5">
           {selectMode ? (
             <>
               <button
@@ -475,8 +466,7 @@ function BomManagement() {
               </button>
             </>
           )}
-        </div>
-      </div>
+        </div>} />
 
       {/* 隐藏的文件输入 */}
       <input
@@ -488,7 +478,7 @@ function BomManagement() {
       />
 
       {/* Summary + 系统筛选 */}
-      <div className="p-4">
+      <div className="mx-auto max-w-5xl p-4">
         <div className="bg-white rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between text-sm mb-3">
             <span className="text-gray-500">清单子目总数</span>
@@ -618,7 +608,7 @@ function BomManagement() {
         )}
       </div>
 
-      <div className="hidden px-4 md:block">
+      <div className="mx-auto hidden max-w-5xl px-4 md:block">
         {filteredItems.length === 0 ? <div className="rounded-2xl bg-white py-16 text-center text-gray-400">{bomItems.length === 0 ? '暂无清单子目' : '没有符合条件的子目'}</div> : (
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500"><tr>{selectMode && <th className="w-12 px-4 py-3"></th>}<th className="px-4 py-3">编号 / 子目名称</th><th className="px-4 py-3">所属系统</th><th className="px-4 py-3 text-right">合同工程量</th><th className="px-4 py-3 text-right">已完成</th><th className="px-4 py-3 text-right">单价</th><th className="px-4 py-3 text-right">合同金额</th><th className="w-40 px-4 py-3">进度</th><th className="w-24 px-4 py-3 text-right">操作</th></tr></thead>

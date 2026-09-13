@@ -22,20 +22,20 @@ export async function GET(request: Request) {
   const conditions: string[] = [];
   const values: string[] = [];
   for (const [column, value] of [['project_id', params.get('projectId')], ['module', params.get('module')], ['action', params.get('action')], ['result', params.get('result')]]) {
-    if (value) { conditions.push(`${column} = ?`); values.push(value); }
+    if (value) { conditions.push(`l.${column} = ?`); values.push(value); }
   }
   const start = params.get('start');
   const end = params.get('end');
   const keyword = params.get('keyword');
-  if (start) { conditions.push('created_at >= ?'); values.push(`${start} 00:00:00`); }
-  if (end) { conditions.push('created_at <= ?'); values.push(`${end} 23:59:59`); }
-  if (keyword) { conditions.push('(detail LIKE ? OR operator LIKE ? OR entity_type LIKE ?)'); values.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`); }
+  if (start) { conditions.push('l.created_at >= ?'); values.push(`${start} 00:00:00`); }
+  if (end) { conditions.push('l.created_at <= ?'); values.push(`${end} 23:59:59`); }
+  if (keyword) { conditions.push('(l.detail LIKE ? OR l.operator LIKE ? OR l.entity_type LIKE ? OR p.name LIKE ?)'); values.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const scope = params.get('scope');
   const table = scope === 'archive' ? 'audit_log_archive' : 'audit_logs';
-  const rows = db.prepare(`SELECT id, project_id, action, entity_type, entity_id, detail, operator, created_at,
-    operator_id, module, result, ip_address, user_agent, before_data, after_data, device_type, browser
-    FROM ${table} ${where} ORDER BY created_at DESC LIMIT 1000`).all(...values) as Array<Record<string, unknown>>;
+  const rows = db.prepare(`SELECT l.id, l.project_id, p.name AS project_name, l.action, l.entity_type, l.entity_id, l.detail, l.operator, l.created_at,
+    l.operator_id, l.module, l.result, l.ip_address, l.user_agent, l.before_data, l.after_data, l.device_type, l.browser
+    FROM ${table} l LEFT JOIN projects p ON p.id = l.project_id ${where} ORDER BY l.created_at DESC LIMIT 1000`).all(...values) as Array<Record<string, unknown>>;
   // 兼容早期日志：当时参与人员保存的是 w... 内部编号，返回页面前统一替换为姓名。
   const workers = db.prepare('SELECT id, name FROM workers').all() as Array<{ id: string; name: string }>;
   const workerNames = new Map(workers.map((worker) => [worker.id, worker.name]));

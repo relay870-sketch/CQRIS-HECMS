@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useProject } from '@/components/project-provider';
-import { Users, ChevronRight, Settings, User, MapPin, Layers, Clock, ShieldCheck, ScrollText, DatabaseBackup } from 'lucide-react';
+import { Users, ChevronRight, Settings, User, MapPin, Layers, Clock, ShieldCheck, ScrollText, DatabaseBackup, Bot } from 'lucide-react';
 
 interface Worker {
   id: string;
@@ -47,13 +47,6 @@ export default function ProfilePage() {
     }
     fetchData();
   }, [currentProject.id]);
-
-  // Group workers by team
-  const workersByTeam = workers.reduce((acc, worker) => {
-    if (!acc[worker.team]) acc[worker.team] = [];
-    acc[worker.team].push(worker);
-    return acc;
-  }, {} as Record<string, Worker[]>);
 
   if (loading) {
     return (
@@ -132,6 +125,11 @@ export default function ProfilePage() {
             <ScrollText className="w-5 h-5 text-[#7C3AED]" />
             <span className="flex-1 text-left text-sm text-[#1A1A2E]">操作日志</span>
             <span className="text-xs text-gray-400 mr-1">查询/导出</span><ChevronRight className="w-4 h-4 text-gray-300" />
+          </Link>}
+          {currentUser?.role === 'admin' && <Link href="/manage/ai" className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3.5 active:bg-gray-50">
+            <Bot className="h-5 w-5 text-[#1E5AA8]" />
+            <span className="flex-1 text-left text-sm text-[#1A1A2E]">AI 配置</span>
+            <span className="mr-1 text-xs text-gray-400">模型/API</span><ChevronRight className="h-4 w-4 text-gray-300" />
           </Link>}
           {currentUser?.role === 'admin' && <Link href="/manage/backups" className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3.5 active:bg-gray-50">
             <DatabaseBackup className="h-5 w-5 text-[#16A34A]" />

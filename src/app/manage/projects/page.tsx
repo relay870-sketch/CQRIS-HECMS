@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Edit2, Trash2, X, Check } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check } from 'lucide-react';
 import { useProject } from '@/components/project-provider';
+import { ManagePageHeader } from '@/components/manage-page-header';
 
 interface Project {
   id: string;
@@ -160,23 +161,10 @@ export default function ManageProjectsPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6F8] pb-20">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 safe-area-top">
-        <Link href="/profile" className="p-1">
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </Link>
-        <h1 className="text-lg font-bold text-[#1A1A2E]">项目管理</h1>
-        <button
-          onClick={openCreateForm}
-          className="ml-auto flex items-center gap-1 px-3 py-1.5 bg-[#1E5AA8] text-white rounded-lg text-sm"
-        >
-          <Plus className="w-4 h-4" />
-          新建
-        </button>
-      </div>
+      <ManagePageHeader title="项目管理" description={`共 ${projects.length} 个项目 · 创建、编辑和维护项目`} action={<button onClick={openCreateForm} className="flex items-center gap-1 rounded-lg bg-[#1E5AA8] px-3 py-2 text-xs text-white"><Plus className="h-4 w-4" />新建</button>} />
 
       {/* Project List */}
-      <div className="space-y-3 p-4 md:hidden">
+      <div className="mx-auto max-w-5xl space-y-3 p-4 md:hidden">
         {projects.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <p>暂无项目</p>
@@ -238,7 +226,7 @@ export default function ManageProjectsPage() {
         )}
       </div>
 
-      <div className="hidden p-5 md:block">
+      <div className="mx-auto hidden max-w-5xl p-4 md:block">
         {projects.length === 0 ? <div className="rounded-2xl bg-white py-16 text-center text-gray-400">暂无项目</div> : (
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
             <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm">

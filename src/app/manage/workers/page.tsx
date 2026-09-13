@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, Pencil, Trash2, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users } from 'lucide-react';
 import { useProject } from '@/components/project-provider';
+import { ManagePageHeader } from '@/components/manage-page-header';
 
 interface Worker {
   id: string;
@@ -16,7 +16,6 @@ interface Worker {
 }
 
 function WorkersPageInner() {
-  const router = useRouter();
   const { currentProject } = useProject();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -128,30 +127,11 @@ function WorkersPageInner() {
   }, {} as Record<string, Worker[]>);
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] pt-header safe-area-top">
-      {/* 顶部导航 */}
-      <div className="fixed top-0 left-0 right-0 z-40 bg-[#1E5AA8] text-white">
-        <div className="flex items-center h-12 px-4">
-          <button onClick={() => router.back()} className="p-1 -ml-1">
-            <ArrowLeft size={22} />
-          </button>
-          <h1 className="text-base font-medium ml-3">人员管理</h1>
-          <span className="ml-2 text-sm opacity-80">
-            {currentProject?.name || ''}
-          </span>
-          <div className="flex-1" />
-          <button
-            onClick={handleOpenForm}
-            className="flex items-center gap-1 bg-white/20 px-3 py-1.5 rounded-lg text-sm"
-          >
-            <Plus size={16} />
-            添加
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#F5F6F8] pb-8">
+      <ManagePageHeader title="人员管理" description={`${currentProject?.name || ''} · 共 ${workers.length} 人`} action={<button onClick={handleOpenForm} className="flex items-center gap-1 rounded-lg bg-[#1E5AA8] px-3 py-2 text-xs text-white"><Plus size={15} />添加</button>} />
 
       {/* 内容区域 */}
-      <div className="px-4 pb-6 pt-14 md:hidden">
+      <div className="px-4 py-4 pb-6 md:hidden">
         {loading ? (
           <div className="text-center py-12 text-gray-400">加载中...</div>
         ) : workers.length === 0 ? (
@@ -217,7 +197,7 @@ function WorkersPageInner() {
         )}
       </div>
 
-      <div className="hidden px-5 pb-8 pt-16 md:block">
+      <div className="mx-auto hidden max-w-5xl px-4 py-4 pb-8 md:block">
         {loading ? <div className="py-16 text-center text-gray-400">加载中...</div> : workers.length === 0 ? <div className="rounded-2xl bg-white py-16 text-center text-gray-400">暂无人员</div> : (
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
             <div className="border-b border-gray-100 px-5 py-3 text-sm text-gray-500">共 {workers.length} 人，{Object.keys(groupedWorkers).length} 个班组</div>

@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, DatabaseBackup, Download, HardDrive, RefreshCw, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { DatabaseBackup, Download, HardDrive, RefreshCw, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { ManagePageHeader } from '@/components/manage-page-header';
 import { toast } from 'sonner';
 
 interface BackupInfo { name: string; size: number; createdAt: string; type: 'auto' | 'manual' | 'pre-restore' }
@@ -51,7 +51,7 @@ export default function BackupsPage() {
   };
 
   return <div className="min-h-screen bg-[#F5F6F8] pb-8">
-    <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-4 py-3"><Link href="/profile" className="rounded-lg p-2"><ArrowLeft className="h-5 w-5" /></Link><div className="flex-1"><h1 className="font-semibold">数据备份</h1><p className="text-xs text-gray-400">数据库、施工照片和上传文档</p></div><button type="button" onClick={() => void load()} className="rounded-lg p-2 text-gray-500" aria-label="刷新"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button></header>
+    <ManagePageHeader title="数据备份" description="数据库、施工照片和上传文档" action={<button type="button" onClick={() => void load()} className="rounded-lg p-2 text-gray-500" aria-label="刷新"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>} />
     <main className="mx-auto max-w-5xl space-y-4 p-4">
       <section className="rounded-2xl bg-gradient-to-br from-[#1E5AA8] to-[#16457F] p-5 text-white shadow-sm"><div className="flex items-start gap-3"><DatabaseBackup className="mt-0.5 h-7 w-7"/><div><h2 className="font-semibold">完整数据保护</h2><p className="mt-1 text-xs leading-5 text-white/70">生产服务每天自动备份一次，保留最近30个自动备份。恢复前会再次保存当前数据，并校验文件和数据库完整性。</p></div></div><div className="mt-4 grid grid-cols-2 gap-3"><button disabled={!!working} onClick={() => void create()} className="flex items-center justify-center gap-2 rounded-xl bg-white py-2.5 text-sm font-medium text-[#1E5AA8] disabled:opacity-60"><HardDrive className="h-4 w-4" />{working === 'create' ? '备份中…' : '立即备份'}</button><button disabled={!!working} onClick={() => fileRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl bg-white/15 py-2.5 text-sm font-medium disabled:opacity-60"><Upload className="h-4 w-4" />上传并恢复</button></div><input ref={fileRef} type="file" accept=".tar.gz,application/gzip" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadRestore(file); }} /></section>
       <section className="overflow-hidden rounded-2xl bg-white shadow-sm"><div className="flex items-center justify-between border-b px-4 py-3"><div><h2 className="text-sm font-semibold">备份记录</h2><p className="mt-0.5 text-xs text-gray-400">共 {backups.length} 个备份</p></div></div>

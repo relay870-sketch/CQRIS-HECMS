@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Clock3, Save, Users } from 'lucide-react';
 import { useProject } from '@/components/project-provider';
+import { ManagePageHeader } from '@/components/manage-page-header';
 
 interface Worker { id: string; name: string; team: string; role: string }
 interface AttendanceRow { worker_id: string; attendance: 'full' | 'half' | 'absent'; overtime_hours: number }
@@ -80,7 +81,9 @@ export default function AttendanceManagementPage() {
     finally { setSaving(false); }
   };
 
-  return <div className="min-h-screen bg-[#F5F6F8] px-3 py-3 pb-24 sm:px-4">
+  return <div className="min-h-screen bg-[#F5F6F8] pb-24">
+    <ManagePageHeader title="考勤管理" description={`${currentProject.name} · 补录与修正每日考勤`} />
+    <main className="mx-auto max-w-5xl px-3 py-3 sm:px-4">
     <div className="rounded-2xl bg-white p-3.5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div><div className="text-sm font-semibold text-gray-900">每日考勤总览</div><div className="mt-0.5 text-xs text-gray-400">点击符号即可修正状态</div></div>
@@ -147,5 +150,6 @@ export default function AttendanceManagementPage() {
     <textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="修正原因（必填），如：补录昨日漏报考勤"
       className="mt-3 min-h-16 w-full resize-none rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm outline-none focus:border-amber-400" />
     <button type="button" disabled={saving || loading || !date} onClick={save} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E5AA8] py-3 font-medium text-white disabled:opacity-50"><Save className="h-4 w-4" />{saving ? '保存中...' : '保存考勤修正'}</button>
+    </main>
   </div>;
 }

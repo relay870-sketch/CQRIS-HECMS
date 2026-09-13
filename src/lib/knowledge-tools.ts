@@ -249,6 +249,12 @@ export function replaceProjectMemory(projectId: string, memory: ProjectMemorySna
   })();
 }
 
+/** 清空某项目的全部长期记忆，不影响 AI 对话历史。 */
+export function clearProjectMemory(projectId: string): void {
+  if (!projectId) return;
+  getDb().prepare('DELETE FROM project_memories WHERE project_id = ?').run(projectId);
+}
+
 /** 清空某项目的问答记忆 */
 export function clearChatHistory(projectId: string): void {
   if (!projectId) return;
