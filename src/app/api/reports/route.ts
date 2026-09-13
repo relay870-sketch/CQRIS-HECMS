@@ -317,8 +317,8 @@ async function saveReport(request: Request, editId: string | null) {
   const bomUpdates = new Map<string, number>();
   for (const item of workItems) {
     if (!item.bomItemId) continue;
-    const bom = db.prepare('SELECT project_id, total_qty, completed_qty, unit FROM bom_items WHERE id = ?').get(item.bomItemId) as
-      | { project_id: string; total_qty: number; completed_qty: number; unit: string }
+    const bom = db.prepare('SELECT project_id, unit FROM bom_items WHERE id = ?').get(item.bomItemId) as
+      | { project_id: string; unit: string }
       | undefined;
     if (!bom || bom.project_id !== projectId) {
       return NextResponse.json({ error: `施工内容「${item.name}」关联的清单子目不属于当前项目` }, { status: 400 });
@@ -327,10 +327,6 @@ async function saveReport(request: Request, editId: string | null) {
       return NextResponse.json({ error: `「${item.name}」的计量单位为“${bom.unit}”，请保持一致` }, { status: 400 });
     }
     const acc = (bomUpdates.get(item.bomItemId) || 0) + item.quantity;
-    const effectiveCompleted = Math.max(0, bom.completed_qty - (oldBomQuantities.get(item.bomItemId) || 0));
-    if (effectiveCompleted + acc > bom.total_qty) {
-      return NextResponse.json({ error: `「${item.name}」报工工程量超出清单剩余量（${bom.total_qty - effectiveCompleted}${bom.unit}）` }, { status: 400 });
-    }
     bomUpdates.set(item.bomItemId, acc);
   }
 

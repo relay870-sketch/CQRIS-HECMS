@@ -151,11 +151,12 @@ export async function POST(request: NextRequest) {
 1. 项目统计和事实必须基于“项目实时数据”，技术问题优先基于“参考资料”；没有数据时如实告知，禁止编造
 2. 回答要专业、实用，适合施工现场人员阅读；详细程度为${aiPreferences.responseStyle === 'concise' ? '简洁' : aiPreferences.responseStyle === 'detailed' ? '详细' : '标准'}
 3. 涉及安全规范的问题要特别强调安全注意事项
-4. ${aiPreferences.showSources ? '每个项目统计结论必须注明时间范围，并引用[项目数据1-4]；引用文档时注明[参考资料编号]' : '保留必要的统计时间范围，无需显示内部资料编号'}
+4. ${aiPreferences.showSources ? '每个项目统计结论必须注明时间范围，并引用[项目数据1-4]；回答末尾增加“数据依据”，列出实际使用的项目数据编号、记录数量和“可核对的数据出处”中的对应页面；引用文档时注明[参考资料编号]' : '保留必要的统计时间范围，无需显示内部资料编号'}
 5. “人·小时”表示人数乘以每人加班小时，不得误写成普通小时
 6. 系统进度与按合同金额计算进度不一致时，分别说明口径
 7. 如果问题不清晰，请主动询问以获取更多信息
 ${aiPreferences.customInstructions ? `8. 管理员自定义要求：${aiPreferences.customInstructions}` : ''}
+9. “数据库精确聚合”中的数字必须原样使用，不得根据有限明细自行估算；先说明项目、时间和筛选条件
 
 ${projectMemoryText ? `【项目长期记忆】\n${projectMemoryText}\n` : ''}
 ${projectDataText ? `【项目实时数据】\n${projectDataText}\n` : ''}
@@ -229,7 +230,7 @@ ${contextText ? `【知识库参考资料】\n${contextText}` : '当前没有匹
 2. 回答要简洁、专业、实用，适合施工现场人员阅读
 3. 涉及安全规范的问题要特别强调安全注意事项
 4. 引用资料时注明文档名称或资料编号
-5. ${aiPreferences.showSources ? '每个项目统计结论注明时间范围，并引用[项目数据1-4]；引用资料时注明[资料编号]' : '回答中保留必要的统计时间范围，但无需显示内部资料编号'}
+5. ${aiPreferences.showSources ? '每个项目统计结论注明时间范围，并引用[项目数据1-4]；回答末尾增加“数据依据”，列出实际使用的数据编号、记录数量和“可核对的数据出处”中的对应页面；引用资料时注明[资料编号]' : '回答中保留必要的统计时间范围，但无需显示内部资料编号'}
 6. 整理日报时按日期和施工位置列出内容，统计出勤、加班人·小时、合同外施工与现场说明
 7. “人·小时”是人数乘以每人加班小时；系统进度与合同金额进度口径不同时分别说明
 7.1 用户问出勤时，${aiPreferences.attendanceMetric === 'headcount' ? '优先回答去重出勤人数，并补充必要的人天信息' : aiPreferences.attendanceMetric === 'personDays' ? '优先回答累计出勤人天，并补充必要的去重人数' : '同时回答去重出勤人数和累计出勤人天'}，避免把人数与人天混为一谈
@@ -238,6 +239,8 @@ ${contextText ? `【知识库参考资料】\n${contextText}` : '当前没有匹
 10. 回答详细程度：${aiPreferences.responseStyle === 'concise' ? '简洁，优先直接给结论' : aiPreferences.responseStyle === 'detailed' ? '详细，说明口径、明细和建议' : '标准，先给结论再给必要说明'}
 ${aiPreferences.customInstructions ? `11. 管理员自定义要求：${aiPreferences.customInstructions}` : ''}
 12. 当前启用的能力模块：${Object.entries(aiPreferences.abilities).filter(([, enabled]) => enabled).map(([name]) => name).join('、') || '无'}；未启用模块不得声称已查询对应数据
+13. “数据库精确聚合”中的数字是系统计算结果，必须原样使用；不得自行相加、估算或根据最多60项明细反推总数
+14. 先复述数据库查询计划中的项目、时间及额外筛选；如果用户指定的系统或人员没有被查询计划识别，必须先询问，不得按全部数据回答
 
 ${projectMemoryText ? `【项目长期记忆】\n${projectMemoryText}\n` : ''}
 ${knowledgeText ? `【知识库参考资料】\n${knowledgeText}` : ''}

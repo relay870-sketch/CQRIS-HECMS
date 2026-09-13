@@ -17,8 +17,15 @@ async function requireAdmin(): Promise<boolean> {
   return user?.role === 'admin';
 }
 
+async function currentRole(): Promise<'admin' | 'reporter' | 'viewer' | null> {
+  const store = await cookies();
+  const user = await verifySessionToken(store.get('construction_session')?.value, process.env.APP_SESSION_SECRET || '');
+  return user?.role || null;
+}
+
 export async function GET(request: Request) {
-  if (!await requireAdmin()) return NextResponse.json({ error: '仅管理员可管理数据备份' }, { status: 403 });
+  const role = await currentRole();
+  if (role !== 'admin' && role !== 'viewer') return NextResponse.json({ error: '没有权限查看数据备份' }, { status: 403 });
   const params = new URL(request.url).searchParams;
   const download = params.get('download');
   if (download) {
@@ -28,7 +35,7 @@ export async function GET(request: Request) {
       return new Response(fs.readFileSync(file), { headers: { 'Content-Type': 'application/gzip', 'Content-Disposition': `attachment; filename="${path.basename(file)}"`, 'Content-Length': String(fs.statSync(file).size) } });
     } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : '下载失败' }, { status: 400 }); }
   }
-  try { await ensureDailyBackup(); } catch (error) { console.error('自动备份失败:', error); }
+  if (role === 'admin') try { await ensureDailyBackup(); } catch (error) { console.error('自动备份失败:', error); }
   const backups = listBackups();
   return NextResponse.json({ backups, latest: backups[0] || null });
 }

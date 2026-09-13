@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/components/project-provider';
-import { Check, ImagePlus, MapPin, Users, Plus, X } from 'lucide-react';
+import { AlertTriangle, Check, CircleCheck, CircleX, ImagePlus, Link2, MapPin, ShieldCheck, Users, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { normalizeMatchText, rankBomMatches } from '@/lib/bom-matcher';
 
 interface Worker {
   id: string;
@@ -65,6 +66,17 @@ interface PendingPhoto {
   originalSize: number;
 }
 
+interface InspectionResult {
+  canSubmit: boolean;
+  checks: Array<{ level: 'error' | 'warning' | 'passed'; field: string; message: string; itemIndex?: number }>;
+  summary: { passed: number; warnings: number; errors: number };
+  source: { date: string; checkedAt: string; rules: string[] };
+  aiReview: { available: boolean; model?: string; notice?: string; items: Array<{ index: number; clarity: 'clear' | 'improve'; suggestedLocation: string; suggestedDescription: string; risks: string[] }> };
+  error?: string;
+}
+
+interface MatchHistoryRow { query_text: string; bom_item_id: string; confirm_count: number }
+
 const UNITS = ['米', '台', '套', '个', '处', '根'];
 const WEATHERS = ['晴', '多云', '阴', '小雨', '中雨', '大雨', '雪'];
 
@@ -90,6 +102,9 @@ export default function ReportPage() {
   const [submitting, setSubmitting] = useState(false);
   const [preparingPhotos, setPreparingPhotos] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [inspection, setInspection] = useState<InspectionResult | null>(null);
+  const [inspectionOpen, setInspectionOpen] = useState(false);
+  const [inspecting, setInspecting] = useState(false);
 
   // 联想数据
   const [bomItems, setBomItems] = useState<BomItem[]>([]);
@@ -97,6 +112,7 @@ export default function ReportPage() {
   const [locations, setLocations] = useState<Array<{ id: string | null; name: string }>>([]);
   const [systems, setSystems] = useState<string[]>([]);
   const [lastWorkerIds, setLastWorkerIds] = useState<string[]>([]);
+  const [matchHistory, setMatchHistory] = useState<MatchHistoryRow[]>([]);
   const [ready, setReady] = useState(false);
 
   // 联想下拉状态
@@ -123,23 +139,26 @@ export default function ReportPage() {
     if (!isReady || currentProject.name === '加载中...') return;
     async function fetchData() {
       try {
-        const [bomRes, workersRes, locRes, sysRes, reportRes] = await Promise.all([
+        const [bomRes, workersRes, locRes, sysRes, reportRes, matchRes] = await Promise.all([
           fetch(`/api/bom?projectId=${currentProject.id}`),
           fetch(`/api/workers?projectId=${currentProject.id}`),
           fetch(`/api/locations?projectId=${currentProject.id}`),
           fetch(`/api/systems?projectId=${currentProject.id}`),
           fetch(editId ? `/api/reports?id=${encodeURIComponent(editId)}` : `/api/reports?projectId=${currentProject.id}&latest=1`),
+          fetch(`/api/bom/match?projectId=${currentProject.id}`),
         ]);
-        const [bomData, workersData, locData, sysData, reportData] = await Promise.all([
+        const [bomData, workersData, locData, sysData, reportData, matchData] = await Promise.all([
           bomRes.json(),
           workersRes.json(),
           locRes.json(),
           sysRes.json(),
           reportRes.json(),
+          matchRes.json(),
         ]);
         setBomItems(Array.isArray(bomData) ? bomData : []);
         setWorkerList(Array.isArray(workersData) ? workersData : []);
         setLocations(Array.isArray(locData) ? locData : []);
+        setMatchHistory(Array.isArray(matchData) ? matchData : []);
         const systemNames = Array.isArray(sysData) ? sysData.map((s: { name: string }) => s.name) : [];
         setSystems(systemNames);
         if (systemNames.length > 0) {
@@ -247,12 +266,21 @@ export default function ReportPage() {
 
   const pickBomItem = (item: BomItem) => {
     if (focusedWorkItemKey === null) return;
+    const queryText = workItems.find((workItem) => workItem.key === focusedWorkItemKey)?.name.trim() || '';
     updateWorkItem(focusedWorkItemKey, {
       name: item.name,
       code: item.code,
       unit: item.unit,
       bomItemId: item.id,
     });
+    if (queryText) {
+      void fetch('/api/bom/match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: currentProject.id, queryText, bomItemId: item.id }) });
+      const normalized = normalizeMatchText(queryText);
+      setMatchHistory((current) => {
+        const found = current.find((row) => row.query_text === normalized && row.bom_item_id === item.id);
+        return found ? current.map((row) => row === found ? { ...row, confirm_count: row.confirm_count + 1 } : row) : [...current, { query_text: normalized, bom_item_id: item.id, confirm_count: 1 }];
+      });
+    }
     setFocusedWorkItemKey(null);
   };
 
@@ -338,7 +366,7 @@ export default function ReportPage() {
     });
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (inspectionConfirmed = false) => {
     if (!date) return toast.error('请填写施工日期');
     const validItems = workItems.filter((it) => it.name.trim());
     if (validItems.length === 0) return toast.error('请至少填写一条施工内容');
@@ -356,6 +384,31 @@ export default function ReportPage() {
       if (it.attendance === 'none' && !it.overtime) {
         return toast.error(`「${it.name}」请选择出勤（全天/半天）或勾选加班`);
       }
+    }
+
+    if (!inspectionConfirmed) {
+      setInspecting(true);
+      try {
+        const response = await fetch('/api/reports/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: currentProject.id, editId, date, system: selectedSystem,
+            workItems: validItems.map((item) => ({ ...item, quantity: Number(item.quantity) })) }),
+        });
+        const responseText = await response.text();
+        if (!responseText) throw new Error('填报检查服务未返回内容，请刷新页面后重试');
+        let result: InspectionResult;
+        try { result = JSON.parse(responseText) as InspectionResult; }
+        catch { throw new Error('填报检查服务返回异常，请确认服务已更新并重启'); }
+        if (!response.ok) throw new Error(result.error || '填报检查失败');
+        setInspection(result);
+        setInspectionOpen(true);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '填报检查失败');
+      } finally {
+        setInspecting(false);
+      }
+      return;
     }
 
     setSubmitting(true);
@@ -412,7 +465,12 @@ export default function ReportPage() {
         }),
       });
 
-      const result: { error?: string } = await response.json();
+      const responseText = await response.text();
+      let result: { error?: string } = {};
+      if (responseText) {
+        try { result = JSON.parse(responseText) as { error?: string }; }
+        catch { result = { error: '服务器返回异常，请稍后重试' }; }
+      }
       if (response.ok) {
         // 记住本次的人员，方便下次快速填写
         localStorage.setItem(`report_last_workers_${currentProject.id}`, JSON.stringify(allWorkerIds));
@@ -433,15 +491,10 @@ export default function ReportPage() {
 
   const matchedBom = (key: number) => {
     const it = workItems.find((w) => w.key === key);
-    if (!it || !it.name.trim()) return [];
-    const q = it.name.trim().toLowerCase();
-    // 只联想"所属系统"下的清单子目（未指定系统的子目视为通用）
-    return bomItems
-      .filter((b) => {
-        const systemOk = !selectedSystem || b.system === selectedSystem || !b.system;
-        return systemOk && (b.name.toLowerCase().includes(q) || b.code.toLowerCase().includes(q));
-      })
-      .slice(0, 10);
+    if (!it || !it.name.trim() || it.bomItemId) return [];
+    const normalized = normalizeMatchText(it.name);
+    const history = Object.fromEntries(matchHistory.filter((row) => row.query_text === normalized).map((row) => [row.bom_item_id, row.confirm_count]));
+    return rankBomMatches(it.name, bomItems, { system: selectedSystem, unit: it.unit, history });
   };
 
   /** 判断桩号主干数字段是否以输入开头（如输入 15 时 K15+015 / ZK15+xxx 优先） */
@@ -606,31 +659,31 @@ export default function ReportPage() {
                         onChange={(e) => {
                           // 输入时强制激活联想
                           setFocusedWorkItemKey(it.key);
-                          updateWorkItem(it.key, { name: e.target.value, bomItemId: e.target.value ? it.bomItemId : null });
+                          updateWorkItem(it.key, { name: e.target.value });
                         }}
                         onFocus={() => setFocusedWorkItemKey(it.key)}
                         onBlur={() => setTimeout(() => setFocusedWorkItemKey(null), 150)}
                         placeholder="输入关键词从清单选择，或直接输入内容"
-                        className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-[15px] placeholder:text-gray-300 focus:border-[#1E5AA8] focus:outline-none"
+                        className={`h-11 w-full rounded-xl border px-3.5 text-[15px] placeholder:text-gray-300 focus:outline-none ${it.bomItemId ? 'border-[#93B4E2] bg-[#F2F7FF] font-medium text-[#1E5AA8] focus:border-[#1E5AA8]' : 'border-gray-200 bg-white focus:border-[#1E5AA8]'}`}
                       />
                       {matches.length > 0 && (
                         <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-100 rounded-lg shadow-lg z-20 max-h-48 overflow-auto">
-                          {matches.map((b) => (
+                          {matches.map((match) => (
                             <button
-                              key={b.id}
+                              key={match.item.id}
                               type="button"
                               onMouseDown={(e) => {
                                 e.preventDefault();
-                                pickBomItem(b);
+                                pickBomItem(match.item);
                               }}
                               className="block w-full text-left px-4 py-2.5 hover:bg-[#E8F0FE]"
                             >
-                              <div className="text-[14px]">{b.name}</div>
-                              <div className="text-[12px] text-gray-400">
-                                数量 {b.total_qty ?? 0}{b.unit}
-                                {typeof b.total_qty === 'number' && typeof b.completed_qty === 'number' && b.total_qty - b.completed_qty > 0 && (
+                              <div className="flex items-center justify-between gap-2 text-[14px]"><span>{match.item.code} · {match.item.name}</span><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${match.score >= 80 ? 'bg-green-50 text-green-600' : match.score >= 55 ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>{match.score}%</span></div>
+                              <div className="mt-0.5 text-[12px] text-gray-400">
+                                {match.reasons.join(' · ')} · 数量 {match.item.total_qty ?? 0}{match.item.unit}
+                                {typeof match.item.total_qty === 'number' && typeof match.item.completed_qty === 'number' && match.item.total_qty - match.item.completed_qty > 0 && (
                                   <span className="text-gray-300 ml-1.5">
-                                    剩余 {b.total_qty - b.completed_qty}{b.unit}
+                                    剩余 {match.item.total_qty - match.item.completed_qty}{match.item.unit}
                                   </span>
                                 )}
                               </div>
@@ -638,6 +691,7 @@ export default function ReportPage() {
                           ))}
                         </div>
                       )}
+                      {it.bomItemId && <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[#E8F0FE] px-2.5 py-2 text-xs text-[#1E5AA8]"><span className="flex min-w-0 items-center gap-1.5"><Link2 className="h-3.5 w-3.5 shrink-0"/><span className="truncate">已关联：{it.code || bomItems.find((item) => item.id === it.bomItemId)?.code || '清单子目'}，可继续补充施工描述</span></span><button type="button" onClick={() => updateWorkItem(it.key, { code: undefined, bomItemId: null })} className="shrink-0 rounded-md bg-white/70 px-2 py-1 text-[11px]">取消关联</button></div>}
                     </div>
                     <div className="mt-2.5 grid grid-cols-[1fr_92px] gap-2">
                       <input
@@ -877,16 +931,25 @@ export default function ReportPage() {
           {/* 提交 */}
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
+            onClick={() => void handleSubmit()}
+            disabled={submitting || inspecting}
             className="h-13 w-full rounded-2xl bg-[#16A34A] text-[16px] font-semibold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-50"
           >
-            {submitting
+            {inspecting ? '正在检查填报内容…' : submitting
               ? uploadProgress
                 ? `上传照片 ${uploadProgress.completed}/${uploadProgress.total}`
                 : '正在提交…'
               : editId ? '保存修改' : '提交报工'}
           </button>
+          {inspectionOpen && inspection && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setInspectionOpen(false); }}>
+            <section className="max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-xl sm:rounded-2xl">
+              <div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><div className={`rounded-xl p-2.5 ${inspection.summary.errors ? 'bg-red-50 text-red-600' : inspection.summary.warnings ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>{inspection.summary.errors ? <CircleX className="h-5 w-5"/> : inspection.summary.warnings ? <AlertTriangle className="h-5 w-5"/> : <ShieldCheck className="h-5 w-5"/>}</div><div><h2 className="text-[17px] font-semibold">本次填报检查</h2><p className="mt-1 text-xs text-gray-400">{inspection.summary.passed} 项通过 · {inspection.summary.warnings} 项提醒 · {inspection.summary.errors} 项错误</p></div></div><button type="button" onClick={() => setInspectionOpen(false)} className="rounded-lg p-2 text-gray-400"><X className="h-5 w-5"/></button></div>
+              <div className="mt-4 space-y-2">{inspection.checks.filter((item) => item.level !== 'passed').map((item, index) => <div key={`${item.field}-${index}`} className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm ${item.level === 'error' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{item.level === 'error' ? <CircleX className="mt-0.5 h-4 w-4 shrink-0"/> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/>}<div><span className="font-medium">{item.field}</span><p className="mt-0.5 leading-5">{item.message}</p></div></div>)}{inspection.summary.errors === 0 && inspection.summary.warnings === 0 && <div className="flex items-center gap-2 rounded-xl bg-green-50 px-3 py-3 text-sm text-green-700"><CircleCheck className="h-4 w-4"/>日期、系统、位置、施工内容、数量、单位及清单工程量检查均已通过。</div>}</div>
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3"><div className="flex items-center justify-between gap-2"><h3 className="flex items-center gap-1.5 text-sm font-semibold text-[#1E5AA8]"><ShieldCheck className="h-4 w-4"/>AI提示与建议</h3>{inspection.aiReview.model && <span className="text-[10px] text-gray-400">{inspection.aiReview.model}</span>}</div>{inspection.aiReview.items.length ? <div className="mt-2 space-y-2">{inspection.aiReview.items.map((review) => <div key={review.index} className="rounded-lg bg-white p-2.5 text-xs text-gray-600"><p className="font-medium text-gray-700">第{review.index + 1}项 · {review.clarity === 'clear' ? '描述清楚' : '建议补充'}</p>{review.suggestedLocation && <div className="mt-1.5"><span className="text-gray-400">位置建议：</span>{review.suggestedLocation}</div>}{review.suggestedDescription && <div className="mt-1.5"><span className="text-gray-400">内容建议：</span>{review.suggestedDescription}</div>}{review.risks.length > 0 && <div className="mt-1.5"><span className="text-gray-400">提示：</span>{review.risks.join('；')}</div>}{(review.suggestedLocation || review.suggestedDescription) && <button type="button" onClick={() => { const target = workItems.filter((item) => item.name.trim())[review.index]; if (!target) return; updateWorkItem(target.key, { ...(review.suggestedLocation ? { location: review.suggestedLocation } : {}), ...(review.suggestedDescription ? { name: review.suggestedDescription, code: undefined, bomItemId: null } : {}) }); setInspectionOpen(false); toast.success('已填入AI建议，请补全空白并重新检查'); }} className="mt-2 rounded-md bg-[#E8F0FE] px-2 py-1 text-[#1E5AA8]">采用建议并修改</button>}</div>)}</div> : <p className="mt-2 text-xs leading-5 text-gray-500">{inspection.aiReview.notice || 'AI未发现需要补充的文字问题'}</p>}<p className="mt-2 text-[10px] leading-4 text-gray-400">AI建议不参与合同数量计算，也不会自动修改原始填报。</p></div>
+              <details className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500"><summary className="cursor-pointer font-medium">本次检查依据</summary><p className="mt-2 leading-5">项目：{currentProject.name}<br/>施工日期：{inspection.source.date}<br/>检查规则：{inspection.source.rules.join('、')}<br/>检查时间：{new Date(inspection.source.checkedAt).toLocaleString('zh-CN')}</p></details>
+              <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setInspectionOpen(false)} className="rounded-xl border px-4 py-2.5 text-sm text-gray-600">返回修改</button>{inspection.canSubmit && <button type="button" onClick={() => { setInspectionOpen(false); void handleSubmit(true); }} className="rounded-xl bg-[#1E5AA8] px-4 py-2.5 text-sm font-medium text-white">{inspection.summary.warnings ? '确认无误并提交' : '提交报工'}</button>}</div>
+            </section>
+          </div>}
         </div>
       )}
     </div>

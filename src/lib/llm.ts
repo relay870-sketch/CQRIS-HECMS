@@ -106,6 +106,7 @@ export async function completeChat(
   messages: LlmMessage[],
   config: LlmConfig,
   temperature = 0.1,
+  timeoutMs?: number,
 ): Promise<string> {
   const res = await fetch(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -114,6 +115,7 @@ export async function completeChat(
       Authorization: `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify({ model: config.model, messages, stream: false, temperature }),
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');

@@ -13,7 +13,7 @@ async function requireAdmin(request: Request) {
 
 export async function GET(request: Request) {
   const user = await requireAdmin(request);
-  if (user?.role !== 'admin') return NextResponse.json({ error: '仅管理员可管理 IP 黑名单' }, { status: 403 });
+  if (!user || !['admin', 'viewer'].includes(user.role)) return NextResponse.json({ error: '没有权限查看 IP 黑名单' }, { status: 403 });
   const rows = getDb().prepare(`SELECT * FROM auth_ip_security
     WHERE blocked = 1 OR failed_attempts > 0 ORDER BY blocked DESC, updated_at DESC LIMIT 500`).all();
   return NextResponse.json(rows);

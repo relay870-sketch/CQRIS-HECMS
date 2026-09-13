@@ -7,6 +7,8 @@ import Database from 'better-sqlite3';
 import { clearPasswordFailures, findIpSecurity, recordPasswordFailure } from '../src/lib/ip-security';
 import { removeDuplicateParticipants } from '../src/lib/audit-format';
 import { inferDateRange } from '../src/lib/ai-project-context';
+import { rankBomMatches } from '../src/lib/bom-matcher';
+import { reporterCanWrite } from '../src/lib/role-permissions';
 
 test('合同额进度按工程量乘单价加权', () => {
   const result = calculateProjectProgress([
@@ -25,6 +27,27 @@ test('单价不完整时保留人工进度', () => {
 
 test('完成量不会让自动进度超过百分之百', () => {
   assert.equal(calculateProjectProgress([{ total_qty: 10, completed_qty: 15, unit_price: 100 }], 0).progress, 100);
+});
+
+test('清单智能匹配综合名称、系统、单位与历史确认排序', () => {
+  const items = [
+    { id: 'b1', code: 'JK-01', name: '枪式摄像机安装', unit: '套', system: '监控系统' },
+    { id: 'b2', code: 'TX-01', name: '通信机柜安装', unit: '台', system: '通信系统' },
+  ];
+  const result = rankBomMatches('摄像机安装', items, { system: '监控系统', unit: '套', history: { b1: 2 } });
+  assert.equal(result[0]?.item.id, 'b1');
+  assert.ok((result[0]?.score || 0) >= 80);
+  assert.ok(result[0]?.reasons.includes('所属系统一致'));
+});
+
+test('清单智能匹配能识别立柱的现场常用叫法', () => {
+  const items = [
+    { id: 'pole', code: 'JK-08', name: '摄像机立柱安装', unit: '根', system: '监控系统' },
+    { id: 'camera', code: 'JK-09', name: '摄像机设备安装', unit: '套', system: '监控系统' },
+  ];
+  for (const query of ['摄像机杆安装', '监控杆安装', '摄像机杆体安装', '摄像机杆件安装']) {
+    assert.equal(rankBomMatches(query, items, { system: '监控系统' })[0]?.item.id, 'pole');
+  }
 });
 
 test('登录令牌可验证且错误密钥无法通过', async () => {
@@ -77,4 +100,15 @@ test('AI 项目查询能识别明确日期和最近天数', () => {
   assert.deepEqual(inferDateRange('查询2026年9月8日到2026年9月12日施工记录', now), { start: '2026-09-08', end: '2026-09-12', label: '2026-09-08至2026-09-12' });
   assert.deepEqual(inferDateRange('最近3天谁加班最多', now), { start: '2026-09-11', end: '2026-09-13', label: '最近3天' });
   assert.deepEqual(inferDateRange('上个月出勤多少个工', now), { start: '2026-08-01', end: '2026-08-31', label: '上月' });
+});
+
+test('报工账号可完成新建报工的整条请求链', () => {
+  assert.equal(reporterCanWrite('POST', '/api/reports/validate'), true);
+  assert.equal(reporterCanWrite('POST', '/api/photos/upload'), true);
+  assert.equal(reporterCanWrite('POST', '/api/bom/match'), true);
+  assert.equal(reporterCanWrite('POST', '/api/reports'), true);
+  assert.equal(reporterCanWrite('POST', '/api/reports/validate/'), true);
+  assert.equal(reporterCanWrite('PUT', '/api/reports'), true);
+  assert.equal(reporterCanWrite('DELETE', '/api/reports'), false);
+  assert.equal(reporterCanWrite('POST', '/api/accounts'), false);
 });

@@ -1,12 +1,13 @@
 'use client';
-import { AlertTriangle, BookOpen, CalendarDays, Clock3, TrendingUp } from 'lucide-react';
+import { AlertTriangle, BookOpen, CalendarDays, ClipboardCheck, Clock3, TrendingUp } from 'lucide-react';
 
-export interface AbilityValues { dailyReport: boolean; attendanceAnalysis: boolean; progressAnalysis: boolean; anomalyAnalysis: boolean; knowledgeQa: boolean }
+export interface AbilityValues { dailyReport: boolean; attendanceAnalysis: boolean; progressAnalysis: boolean; anomalyAnalysis: boolean; reportReview: boolean; knowledgeQa: boolean }
 const items = [
   { key: 'dailyReport', name: '施工日报', description: '查询施工记录并生成日报、周报', icon: CalendarDays },
   { key: 'attendanceAnalysis', name: '考勤分析', description: '统计人数、人天、半天和加班', icon: Clock3 },
   { key: 'progressAnalysis', name: '进度分析', description: '读取清单、合同额和完成进度', icon: TrendingUp },
   { key: 'anomalyAnalysis', name: '异常检查', description: '检查漏报、合同外施工和超量项', icon: AlertTriangle },
+  { key: 'reportReview', name: 'AI填报检查', description: '提交前分析文字清晰度和现场风险', icon: ClipboardCheck },
   { key: 'knowledgeQa', name: '资料库问答', description: '检索上传的规范和项目资料', icon: BookOpen },
 ] as const;
 

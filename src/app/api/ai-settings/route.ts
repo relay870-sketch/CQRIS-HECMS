@@ -12,7 +12,8 @@ async function admin(request: Request) { const token = request.headers.get('cook
 const hint = (key: string) => key ? `${key.slice(0, 3)}••••${key.slice(-4)}` : '';
 
 export async function GET(request: Request) {
-  if ((await admin(request))?.role !== 'admin') return NextResponse.json({ error: '仅管理员可管理 AI 配置' }, { status: 403 });
+  const user = await admin(request);
+  if (!user || !['admin', 'viewer'].includes(user.role)) return NextResponse.json({ error: '没有权限查看 AI 配置' }, { status: 403 });
   const settings = readStoredAiSettings();
   if (settings) return NextResponse.json({ source: 'system', activeProfileId: settings.activeProfileId, fallbackProfileId: settings.fallbackProfileId, preferences: readAiPreferences(), usage: getAiUsageSummary(), profiles: settings.profiles.map(({ apiKey, ...profile }) => ({ ...profile, apiKeyHint: hint(apiKey) })) });
   const env = getLlmConfig();
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   if (action === 'preferences') {
     const raw = body.preferences && typeof body.preferences === 'object' ? body.preferences as Partial<AiPreferences> : {};
     const rawAbilities = raw.abilities && typeof raw.abilities === 'object' ? raw.abilities as Partial<typeof defaultAiAbilities> : {};
-    const preferences: AiPreferences = { responseStyle: raw.responseStyle === 'concise' || raw.responseStyle === 'detailed' ? raw.responseStyle : 'standard', attendanceMetric: raw.attendanceMetric === 'headcount' || raw.attendanceMetric === 'personDays' ? raw.attendanceMetric : 'both', showSources: raw.showSources !== false, memoryEnabled: raw.memoryEnabled !== false, customInstructions: typeof raw.customInstructions === 'string' ? raw.customInstructions.trim().slice(0, 2000) : '', abilities: { dailyReport: rawAbilities.dailyReport !== false, attendanceAnalysis: rawAbilities.attendanceAnalysis !== false, progressAnalysis: rawAbilities.progressAnalysis !== false, anomalyAnalysis: rawAbilities.anomalyAnalysis !== false, knowledgeQa: rawAbilities.knowledgeQa !== false } };
+    const preferences: AiPreferences = { responseStyle: raw.responseStyle === 'concise' || raw.responseStyle === 'detailed' ? raw.responseStyle : 'standard', attendanceMetric: raw.attendanceMetric === 'headcount' || raw.attendanceMetric === 'personDays' ? raw.attendanceMetric : 'both', showSources: raw.showSources !== false, memoryEnabled: raw.memoryEnabled !== false, customInstructions: typeof raw.customInstructions === 'string' ? raw.customInstructions.trim().slice(0, 2000) : '', abilities: { dailyReport: rawAbilities.dailyReport !== false, attendanceAnalysis: rawAbilities.attendanceAnalysis !== false, progressAnalysis: rawAbilities.progressAnalysis !== false, anomalyAnalysis: rawAbilities.anomalyAnalysis !== false, reportReview: rawAbilities.reportReview !== false, knowledgeQa: rawAbilities.knowledgeQa !== false } };
     saveAiPreferences(preferences);
     await writeAuditLog(getDb(), request, { module: 'system', action: 'update', entityType: 'AI个性化设置', summary: '更新 AI 回答偏好' });
     return NextResponse.json({ success: true });

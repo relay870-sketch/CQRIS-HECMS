@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authEnabled, verifySessionToken } from '@/lib/auth-core';
+import { reporterCanWrite } from '@/lib/role-permissions';
 
 const publicPaths = ['/login', '/board', '/chongqing-ruisi-logo.png', '/api/public/board', '/api/auth/login', '/api/auth/register', '/api/auth/status', '/api/auth/setup'];
-function reporterCanWrite(request: NextRequest): boolean {
-  return request.method === 'POST' && (request.nextUrl.pathname === '/api/reports' || request.nextUrl.pathname === '/api/photos/upload');
+
+function reporterCanOpenManage(path: string): boolean {
+  return ['/manage/projects', '/manage/workers', '/manage/locations', '/manage/attendance', '/manage/systems', '/manage/bom']
+    .some((allowed) => path === allowed || path.startsWith(`${allowed}/`));
 }
 
 export async function proxy(request: NextRequest) {
@@ -16,10 +19,10 @@ export async function proxy(request: NextRequest) {
   }
   const isWrite = request.nextUrl.pathname.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
   if (isWrite && user.role === 'viewer') return NextResponse.json({ error: '只读账号不能修改数据' }, { status: 403 });
-  if (isWrite && user.role === 'reporter' && !reporterCanWrite(request)) {
+  if (isWrite && user.role === 'reporter' && !reporterCanWrite(request.method, request.nextUrl.pathname)) {
     return NextResponse.json({ error: '报工账号没有管理权限' }, { status: 403 });
   }
-  if (request.nextUrl.pathname.startsWith('/manage/') && user.role !== 'admin') return NextResponse.redirect(new URL('/', request.url));
+  if (request.nextUrl.pathname.startsWith('/manage/') && user.role === 'reporter' && !reporterCanOpenManage(request.nextUrl.pathname)) return NextResponse.redirect(new URL('/', request.url));
   const response = NextResponse.next(); response.headers.set('x-app-role', user.role); response.headers.set('x-app-user-id', user.id); return response;
 }
 

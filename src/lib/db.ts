@@ -466,6 +466,18 @@ function initSchema(db: Database.Database): void {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS bom_match_history (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      query_text TEXT NOT NULL,
+      bom_item_id TEXT NOT NULL,
+      confirm_count INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(project_id, query_text, bom_item_id),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (bom_item_id) REFERENCES bom_items(id) ON DELETE CASCADE
+    );
+
     -- 系统级配置（敏感值由业务层加密后保存）
     CREATE TABLE IF NOT EXISTS system_settings (
       key TEXT PRIMARY KEY,

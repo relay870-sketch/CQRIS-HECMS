@@ -7,7 +7,7 @@ initDbWithSeed();
 export async function GET(request: Request) {
   const token = request.headers.get('cookie')?.match(/(?:^|;\s*)construction_session=([^;]+)/)?.[1];
   const user = await verifySessionToken(token ? decodeURIComponent(token) : undefined, process.env.APP_SESSION_SECRET || '');
-  if (user?.role !== 'admin') return NextResponse.json({ error: '仅管理员可查看操作日志' }, { status: 403 });
+  if (!user || !['admin', 'viewer'].includes(user.role)) return NextResponse.json({ error: '没有权限查看操作日志' }, { status: 403 });
   const params = new URL(request.url).searchParams;
   const db = getDb();
   if (params.get('summary') === '1') {

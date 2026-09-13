@@ -39,6 +39,14 @@ function extractNameFromText(text: string): string {
   return m ? m[1] : '';
 }
 
+/** 将 AI 返回的系统内核对路径显示为可点击链接。 */
+function MessageContent({ content }: { content: string }) {
+  const parts = content.split(/(\/(?:project|manage|records)(?:\/[^\s；，。]*)?(?:\?[^\s；，。]*)?)/g);
+  return <p className="whitespace-pre-wrap">{parts.map((part, index) => /^\/(?:project|manage|records)/.test(part)
+    ? <a key={`${part}-${index}`} href={part} className="font-medium text-[#1E5AA8] underline decoration-[#1E5AA8]/30 underline-offset-2">查看对应数据</a>
+    : <span key={index}>{part}</span>)}</p>;
+}
+
 export default function KnowledgePage() {
   const { currentProject, isReady } = useProject();
   const router = useRouter();
@@ -567,7 +575,7 @@ export default function KnowledgePage() {
                     ? 'bg-[#1E5AA8] text-white'
                     : 'bg-white text-[#1A1A2E] shadow-sm'
                 }`}>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  <MessageContent content={msg.content}/>
                 </div>
                 {msg.role === 'user' && (
                   <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center shrink-0">

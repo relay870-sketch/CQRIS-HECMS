@@ -44,7 +44,8 @@ function normalizeMemory(value: unknown): ProjectMemorySnapshot | null {
 }
 
 export async function GET(request: Request) {
-  if ((await requireAdmin(request))?.role !== 'admin') return NextResponse.json({ error: '仅管理员可管理长期记忆' }, { status: 403 });
+  const user = await requireAdmin(request);
+  if (!user || !['admin', 'viewer'].includes(user.role)) return NextResponse.json({ error: '没有权限查看长期记忆' }, { status: 403 });
   const projectId = new URL(request.url).searchParams.get('projectId') || '';
   if (!projectId || !projectExists(projectId)) return NextResponse.json({ error: '项目不存在' }, { status: 404 });
   return NextResponse.json({ success: true, memory: getProjectMemory(projectId) });

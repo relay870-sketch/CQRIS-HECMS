@@ -46,7 +46,7 @@ function BomManagement() {
   const [systems, setSystems] = useState<string[]>([]);
   const [systemFilter, setSystemFilter] = useState('');
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'unfinished' | 'completed' | 'unpriced'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'not_started' | 'unfinished' | 'completed'>('all');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<BomItem | null>(null);
@@ -355,12 +355,17 @@ function BomManagement() {
     return Math.round((item.completed_qty / item.total_qty) * 100);
   };
 
+  const contractAmount = bomItems.reduce((sum, item) => sum + item.total_qty * (item.unit_price || 0), 0);
+  const completedValue = bomItems.reduce((sum, item) => sum + Math.min(item.completed_qty, item.total_qty) * (item.unit_price || 0), 0);
+  const formatMoney = (value: number) => `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
   const filteredItems = bomItems.filter((item) => {
     const keyword = searchText.trim().toLowerCase();
     const matchesSearch = !keyword || item.name.toLowerCase().includes(keyword) || item.code.toLowerCase().includes(keyword);
     const progress = getProgress(item);
-    const matchesStatus = statusFilter === 'all' || (statusFilter === 'unfinished' && progress < 100) ||
-      (statusFilter === 'completed' && progress >= 100) || (statusFilter === 'unpriced' && !(item.unit_price > 0));
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'not_started' && item.completed_qty <= 0) ||
+      (statusFilter === 'unfinished' && item.completed_qty > 0 && progress < 100) ||
+      (statusFilter === 'completed' && progress >= 100);
     return matchesSearch && matchesStatus;
   });
 
@@ -480,9 +485,10 @@ function BomManagement() {
       {/* Summary + 系统筛选 */}
       <div className="mx-auto max-w-5xl p-4">
         <div className="bg-white rounded-xl p-4 shadow-sm">
-          <div className="flex items-center justify-between text-sm mb-3">
-            <span className="text-gray-500">清单子目总数</span>
-            <span className="flex items-center gap-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="rounded-xl bg-[#F5F8FC] px-4 py-3"><p className="text-xs text-gray-400">合同金额</p><p className="mt-1 text-xl font-bold text-[#1A1A2E]">{formatMoney(contractAmount)}</p></div>
+            <div className="rounded-xl bg-green-50 px-4 py-3"><p className="text-xs text-green-600/70">完成产值</p><p className="mt-1 text-xl font-bold text-green-700">{formatMoney(completedValue)}</p></div>
+            <div className="flex items-center justify-between rounded-xl bg-[#F5F8FC] px-4 py-3"><div><p className="text-xs text-gray-400">清单子目</p><p className="mt-1 text-xl font-bold text-[#1A1A2E]">{bomItems.length}<span className="ml-1 text-xs font-normal text-gray-400">项</span></p></div>
               {selectMode && (
                 <button
                   onClick={toggleSelectAll}
@@ -491,11 +497,10 @@ function BomManagement() {
                   {selectedIds.length === bomItems.length && bomItems.length > 0 ? '取消全选' : '全选'}
                 </button>
               )}
-              <span className="font-bold text-[#1A1A2E]">{bomItems.length} 项</span>
-            </span>
+            </div>
           </div>
           {systems.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto">
+            <div className="mt-3 flex gap-2 overflow-x-auto">
               <button
                 onClick={() => setSystemFilter('')}
                 className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap ${
@@ -520,7 +525,7 @@ function BomManagement() {
           <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="搜索编号或子目名称"
             className="mt-3 w-full rounded-lg bg-[#F5F6F8] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[#1E5AA8]" />
           <div className="mt-2 grid grid-cols-4 gap-1.5">
-            {([['all', '全部'], ['unfinished', '未完成'], ['completed', '已完成'], ['unpriced', '未定价']] as const).map(([value, label]) => (
+            {([['all', '全部'], ['not_started', '未开始'], ['unfinished', '未完成'], ['completed', '已完成']] as const).map(([value, label]) => (
               <button key={value} type="button" onClick={() => setStatusFilter(value)} className={`rounded-lg py-2 text-xs ${statusFilter === value ? 'bg-[#1E5AA8] text-white' : 'bg-gray-100 text-gray-500'}`}>{label}</button>
             ))}
           </div>

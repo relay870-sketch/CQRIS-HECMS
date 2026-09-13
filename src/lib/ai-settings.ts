@@ -2,9 +2,9 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 import { getDb } from '@/lib/db';
 
 export interface AiModelProfile { id: string; name: string; provider: string; apiKey: string; baseUrl: string; model: string }
-export interface AiAbilities { dailyReport: boolean; attendanceAnalysis: boolean; progressAnalysis: boolean; anomalyAnalysis: boolean; knowledgeQa: boolean }
+export interface AiAbilities { dailyReport: boolean; attendanceAnalysis: boolean; progressAnalysis: boolean; anomalyAnalysis: boolean; reportReview: boolean; knowledgeQa: boolean }
 export interface AiPreferences { responseStyle: 'concise' | 'standard' | 'detailed'; attendanceMetric: 'both' | 'headcount' | 'personDays'; showSources: boolean; memoryEnabled: boolean; customInstructions: string; abilities: AiAbilities }
-export const defaultAiAbilities: AiAbilities = { dailyReport: true, attendanceAnalysis: true, progressAnalysis: true, anomalyAnalysis: true, knowledgeQa: true };
+export const defaultAiAbilities: AiAbilities = { dailyReport: true, attendanceAnalysis: true, progressAnalysis: true, anomalyAnalysis: true, reportReview: true, knowledgeQa: true };
 export const defaultAiPreferences: AiPreferences = { responseStyle: 'standard', attendanceMetric: 'both', showSources: true, memoryEnabled: true, customInstructions: '', abilities: defaultAiAbilities };
 export interface StoredAiSettings { profiles: AiModelProfile[]; activeProfileId: string; fallbackProfileId: string | null; preferences: AiPreferences }
 export type StoredAiConfig = Pick<AiModelProfile, 'apiKey' | 'baseUrl' | 'model'>;

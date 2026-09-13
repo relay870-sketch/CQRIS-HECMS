@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { getDb } from '@/lib/db';
 
-export function recordAiUsage(input: { projectId?: string; profileId?: string; model: string; taskType: 'chat' | 'memory'; success: boolean; fallbackUsed?: boolean; durationMs: number; error?: string }): void {
+export function recordAiUsage(input: { projectId?: string; profileId?: string; model: string; taskType: 'chat' | 'memory' | 'report_review'; success: boolean; fallbackUsed?: boolean; durationMs: number; error?: string }): void {
   try { getDb().prepare('INSERT INTO ai_usage_logs (id, project_id, profile_id, model, task_type, success, fallback_used, duration_ms, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(randomUUID(), input.projectId || null, input.profileId || null, input.model, input.taskType, input.success ? 1 : 0, input.fallbackUsed ? 1 : 0, Math.max(0, Math.round(input.durationMs)), input.error?.slice(0, 500) || null); } catch (error) { console.error('记录 AI 使用情况失败:', error); }
 }
 

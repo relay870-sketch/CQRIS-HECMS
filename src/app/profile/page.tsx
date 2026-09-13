@@ -66,7 +66,7 @@ export default function ProfilePage() {
           </div>
           <div className="flex-1">
             <div className="font-medium text-[#1A1A2E]">{currentUser?.name || '当前用户'}</div>
-            <div className="text-xs text-gray-400">{currentUser?.role === 'admin' ? 'admin · ' : ''}{currentProject.name}</div>
+            <div className="text-xs text-gray-400">{currentUser?.role === 'admin' ? '管理员' : currentUser?.role === 'reporter' ? '报工人员' : '只读人员'} · {currentProject.name}</div>
           </div>
           <Settings className="w-5 h-5 text-gray-300" />
         </div>
@@ -75,6 +75,7 @@ export default function ProfilePage() {
       {/* Quick Actions */}
       <div className="px-4">
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          {currentUser && <>
           <Link
             href="/manage/projects"
             className="w-full flex items-center gap-3 px-4 py-3.5 border-b border-gray-50 active:bg-gray-50"
@@ -116,26 +117,28 @@ export default function ProfilePage() {
             <span className="text-xs text-gray-400 mr-1">监控/收费/通信等</span>
             <ChevronRight className="w-4 h-4 text-gray-300" />
           </Link>
-          {currentUser?.role === 'admin' && <Link href="/manage/accounts" className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50">
+          </>}
+          {(currentUser?.role === 'admin' || currentUser?.role === 'viewer') && <Link href="/manage/accounts" className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50">
             <ShieldCheck className="w-5 h-5 text-[#1E5AA8]" />
             <span className="flex-1 text-left text-sm text-[#1A1A2E]">账号与登录</span>
             <span className="text-xs text-gray-400 mr-1">审核/启停</span><ChevronRight className="w-4 h-4 text-gray-300" />
           </Link>}
-          {currentUser?.role === 'admin' && <Link href="/manage/audit-logs" className="w-full flex items-center gap-3 px-4 py-3.5 border-t border-gray-50 active:bg-gray-50">
+          {(currentUser?.role === 'admin' || currentUser?.role === 'viewer') && <Link href="/manage/audit-logs" className="w-full flex items-center gap-3 px-4 py-3.5 border-t border-gray-50 active:bg-gray-50">
             <ScrollText className="w-5 h-5 text-[#7C3AED]" />
             <span className="flex-1 text-left text-sm text-[#1A1A2E]">操作日志</span>
             <span className="text-xs text-gray-400 mr-1">查询/导出</span><ChevronRight className="w-4 h-4 text-gray-300" />
           </Link>}
-          {currentUser?.role === 'admin' && <Link href="/manage/ai" className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3.5 active:bg-gray-50">
+          {(currentUser?.role === 'admin' || currentUser?.role === 'viewer') && <Link href="/manage/ai" className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3.5 active:bg-gray-50">
             <Bot className="h-5 w-5 text-[#1E5AA8]" />
             <span className="flex-1 text-left text-sm text-[#1A1A2E]">AI 配置</span>
             <span className="mr-1 text-xs text-gray-400">模型/API</span><ChevronRight className="h-4 w-4 text-gray-300" />
           </Link>}
-          {currentUser?.role === 'admin' && <Link href="/manage/backups" className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3.5 active:bg-gray-50">
+          {(currentUser?.role === 'admin' || currentUser?.role === 'viewer') && <Link href="/manage/backups" className="flex w-full items-center gap-3 border-t border-gray-50 px-4 py-3.5 active:bg-gray-50">
             <DatabaseBackup className="h-5 w-5 text-[#16A34A]" />
             <span className="flex-1 text-left text-sm text-[#1A1A2E]">数据备份</span>
             <span className="mr-1 text-xs text-gray-400">备份/恢复</span><ChevronRight className="h-4 w-4 text-gray-300" />
           </Link>}
+          {currentUser?.role === 'viewer' && <div className="border-t border-gray-50 px-5 py-4 text-center text-xs leading-5 text-amber-600">只读模式：可以查看以上全部页面，不能新增、修改、删除、导入或恢复数据。</div>}
         </div>
       </div>
 

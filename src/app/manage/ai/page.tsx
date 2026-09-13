@@ -9,7 +9,7 @@ import { ProjectMemoryManager } from '@/components/project-memory-manager';
 
 interface Profile { id: string; name: string; provider: string; baseUrl: string; model: string; apiKeyHint: string; readOnly?: boolean }
 interface Preferences { responseStyle: 'concise' | 'standard' | 'detailed'; attendanceMetric: 'both' | 'headcount' | 'personDays'; showSources: boolean; memoryEnabled: boolean; customInstructions: string; abilities: AbilityValues }
-const defaultPreferences: Preferences = { responseStyle: 'standard', attendanceMetric: 'both', showSources: true, memoryEnabled: true, customInstructions: '', abilities: { dailyReport: true, attendanceAnalysis: true, progressAnalysis: true, anomalyAnalysis: true, knowledgeQa: true } };
+const defaultPreferences: Preferences = { responseStyle: 'standard', attendanceMetric: 'both', showSources: true, memoryEnabled: true, customInstructions: '', abilities: { dailyReport: true, attendanceAnalysis: true, progressAnalysis: true, anomalyAnalysis: true, reportReview: true, knowledgeQa: true } };
 interface ResponseData { source: 'system' | 'environment' | 'none'; activeProfileId: string; fallbackProfileId: string | null; profiles: Profile[]; preferences: Preferences; usage: AiUsageSummaryValue; error?: string }
 const presets = [
   { provider: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
