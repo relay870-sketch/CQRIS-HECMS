@@ -120,6 +120,8 @@ interface ReportRecord {
   weather?: string | null;
   notes?: string | null;
   system?: string | null;
+  tomorrow_plan?: string | null;
+  tomorrow_location?: string | null;
 }
 
 function parseStoredWorkItems(value: string | null): WorkItem[] {
@@ -295,7 +297,7 @@ async function saveReport(request: Request, editId: string | null) {
   }
 
   const existing = editId
-    ? db.prepare('SELECT id, project_id, date, bom_item_id, quantity, work_items, photos, workers, weather, notes, system FROM reports WHERE id = ?').get(editId) as ReportRecord | undefined
+    ? db.prepare('SELECT id, project_id, date, bom_item_id, quantity, work_items, photos, workers, weather, notes, system, tomorrow_plan, tomorrow_location FROM reports WHERE id = ?').get(editId) as ReportRecord | undefined
     : undefined;
   if (editId && (!existing || existing.project_id !== projectId)) {
     return NextResponse.json({ error: '要修改的报工记录不存在或不属于当前项目' }, { status: 404 });
@@ -347,7 +349,7 @@ async function saveReport(request: Request, editId: string | null) {
   db.transaction(() => {
     if (existing) {
       for (const [bomItemId, qty] of oldBomQuantities) revertBomQuantity(db, bomItemId, qty);
-      db.prepare(`UPDATE reports SET date=?, location=?, lane=?, device_point=?, work_type=?, quantity=?, unit=?, bom_item_id=?, workers=?, weather=?, issue=?, photos=?, notes=?, work_items=?, system=? WHERE id=?`)
+      db.prepare(`UPDATE reports SET date=?, location=?, lane=?, device_point=?, work_type=?, quantity=?, unit=?, bom_item_id=?, workers=?, weather=?, issue=?, photos=?, notes=?, work_items=?, system=?, tomorrow_plan=?, tomorrow_location=? WHERE id=?`)
         .run(date, first.location, typeof data.lane === 'string' && data.lane ? data.lane : null,
           typeof data.devicePoint === 'string' && data.devicePoint ? data.devicePoint : null, first.name, first.quantity,
           first.unit, first.bomItemId || null, JSON.stringify(selectedWorkers),
@@ -355,9 +357,11 @@ async function saveReport(request: Request, editId: string | null) {
           typeof data.issue === 'string' && data.issue.trim() ? data.issue.trim() : null,
           JSON.stringify(Array.isArray(data.photos) ? data.photos : []),
           typeof data.notes === 'string' && data.notes.trim() ? data.notes.trim() : null,
-          JSON.stringify(storedWorkItems), typeof data.system === 'string' && data.system.trim() ? data.system.trim() : null, id);
+          JSON.stringify(storedWorkItems), typeof data.system === 'string' && data.system.trim() ? data.system.trim() : null,
+          typeof data.tomorrowPlan === 'string' && data.tomorrowPlan.trim() ? data.tomorrowPlan.trim() : null,
+          typeof data.tomorrowPlan === 'string' && data.tomorrowPlan.trim() && typeof data.tomorrowLocation === 'string' && data.tomorrowLocation.trim() ? data.tomorrowLocation.trim() : null, id);
     } else {
-      db.prepare(`INSERT INTO reports (id, project_id, date, location, lane, device_point, work_type, quantity, unit, bom_item_id, workers, weather, issue, quality_checks, photos, notes, submitter, work_items, system) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      db.prepare(`INSERT INTO reports (id, project_id, date, location, lane, device_point, work_type, quantity, unit, bom_item_id, workers, weather, issue, quality_checks, photos, notes, submitter, work_items, system, tomorrow_plan, tomorrow_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(
         id,
         projectId,
@@ -378,6 +382,8 @@ async function saveReport(request: Request, editId: string | null) {
         submitterName,
         JSON.stringify(storedWorkItems),
         typeof data.system === 'string' && data.system.trim() ? data.system.trim() : null,
+        typeof data.tomorrowPlan === 'string' && data.tomorrowPlan.trim() ? data.tomorrowPlan.trim() : null,
+        typeof data.tomorrowPlan === 'string' && data.tomorrowPlan.trim() && typeof data.tomorrowLocation === 'string' && data.tomorrowLocation.trim() ? data.tomorrowLocation.trim() : null,
       );
     }
     for (const [bomItemId, acc] of bomUpdates) {

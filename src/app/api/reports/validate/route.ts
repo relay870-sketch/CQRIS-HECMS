@@ -11,7 +11,16 @@ interface CheckItem { level: Level; field: string; message: string; itemIndex?: 
 interface DraftItem { name: string; unit: string; quantity: number; location: string; workers: string[]; external: boolean; bomItemId: string | null }
 interface AiReviewItem { index: number; clarity: 'clear' | 'improve'; suggestedLocation: string; suggestedDescription: string; risks: string[] }
 
-function parseAiReview(content: string, itemCount: number): AiReviewItem[] {
+const CONSTRUCTION_ACTION = /(安装|敷设|布放|穿放|调试|开挖|浇筑|接续|熔接|拆除|迁移|整改|维修|更换|测试|开通|配置|调平|固定|预埋)/;
+
+function hasClearObjectAndAction(description: string): boolean {
+  const actionIndex = description.search(CONSTRUCTION_ACTION);
+  if (actionIndex < 2) return false;
+  const object = description.slice(0, actionIndex).trim();
+  return !/^(完成|进行|开始|今日|现场|全部|所有)$/.test(object);
+}
+
+function parseAiReview(content: string, items: DraftItem[]): AiReviewItem[] {
   const start = content.indexOf('{'); const end = content.lastIndexOf('}');
   if (start < 0 || end <= start) return [];
   try {
@@ -20,21 +29,32 @@ function parseAiReview(content: string, itemCount: number): AiReviewItem[] {
     return value.items.flatMap((raw) => {
       if (!raw || typeof raw !== 'object') return [];
       const item = raw as Record<string, unknown>; const index = Number(item.index);
-      if (!Number.isInteger(index) || index < 0 || index >= itemCount) return [];
-      return [{ index, clarity: item.clarity === 'improve' ? 'improve' as const : 'clear' as const,
-        suggestedLocation: typeof item.suggestedLocation === 'string' ? item.suggestedLocation.trim().slice(0, 200) : '',
-        suggestedDescription: typeof item.suggestedDescription === 'string' ? item.suggestedDescription.trim().slice(0, 300) : '',
-        risks: Array.isArray(item.risks) ? item.risks.filter((risk): risk is string => typeof risk === 'string').map((risk) => risk.trim().slice(0, 200)).filter(Boolean).slice(0, 3) : [] }];
+      if (!Number.isInteger(index) || index < 0 || index >= items.length) return [];
+      // “管箱安装”这类已具备明确对象和工序的现场短句，不接受模型的过度修改建议。
+      if (hasClearObjectAndAction(items[index].name)) return [];
+      const clarity = item.clarity === 'improve' ? 'improve' as const : 'clear' as const;
+      let suggestedDescription = typeof item.suggestedDescription === 'string' ? Array.from(item.suggestedDescription.trim()).slice(0, 30).join('') : '';
+      let risks = Array.isArray(item.risks) ? item.risks.filter((risk): risk is string => typeof risk === 'string').map((risk) => Array.from(risk.trim()).slice(0, 30).join('')).filter(Boolean).slice(0, 1) : [];
+      // AI 输出鉴权：拦截夹带工程量、桩号或不含明确工序的自动改写。
+      if (/([A-Z]{0,3}K?\d+\+\d+|\d+(?:\.\d+)?\s*(?:米|套|台|个|处|根))/i.test(suggestedDescription) || (suggestedDescription && !CONSTRUCTION_ACTION.test(suggestedDescription))) suggestedDescription = '';
+      if (risks.some((risk) => /(数量|单位|桩号|位置|合同|安全|质量)/.test(risk))) risks = [];
+      if (clarity === 'clear' && !suggestedDescription && risks.length === 0) return [];
+      return [{ index, clarity, suggestedLocation: '', suggestedDescription, risks }];
     });
   } catch { return []; }
 }
 
-async function reviewWithAi(projectId: string, system: string, date: string, items: DraftItem[], llm: LlmConfig): Promise<AiReviewItem[]> {
-  const result = await completeChat([{ role: 'system', content: `你是高速公路机电工程报工审核助手。仅审查文字清晰度、可能遗漏和一般提示建议，不计算工程量，不判断合同数据，不虚构规范要求。返回JSON且不要解释：{"items":[{"index":0,"clarity":"clear或improve","suggestedLocation":"仅不清楚时给改写建议，否则空字符串","suggestedDescription":"仅不清楚时给更具体但不添加未知事实的改写模板，否则空字符串","risks":["最多3条简短提示或建议，没有则空数组"]}]}。
-施工位置可以是桩号，也可以是“驻地”“XX收费站”“分中心”“隧道机房”等明确的中文地点。这类中文位置应视为清楚，不得强制建议改为桩号。
-施工位置、数量和计量单位都有独立字段，因此 suggestedDescription 只能包含“施工对象＋具体工序＋已明确的完成状态”，严禁重复位置、桩号、数量、数字工程量或计量单位。用户没有明确填写完成状态时不得自行添加；不得把推测当事实；未知信息用“___”占位。` },
-    { role: 'user', content: JSON.stringify({ projectId, date, system, items: items.map((item, index) => ({ index, location: item.location, description: item.name, external: item.external })) }) }], llm, 0.1, 12000);
-  return parseAiReview(result, items.length);
+async function reviewWithAi(items: DraftItem[], llm: LlmConfig): Promise<AiReviewItem[]> {
+  const result = await completeChat([{ role: 'system', content: `你是施工项目管理人员，正在快速查看工班长的报工记录。你只需判断“施工内容”是否能让管理人员一眼看懂在做什么。
+审查原则：
+1. 只审查施工内容，不审查数量、单位、位置、桩号、合同、安全、质量或格式。
+2. 接受简称、行业常用说法、短句和口语，不挑剔措辞，不要求完整句子。例如“管箱安装”“所有管箱安装”“立柱安装”“光缆敷设”都已经清楚，必须判定clear。
+3. 只有看完仍不知道“对什么做了什么”，或仅写“施工”“安装”“处理”等无对象的笼统内容时，才判定improve。
+4. 可以看懂就判定clear，不给任何建议。
+5. 确实需要改进时，只给一条不超过30个汉字的建议；不得编造未知事实，未知对象用“___”占位。
+返回JSON且不要解释：{"items":[{"index":0,"clarity":"clear或improve","suggestedDescription":"简短改写建议，清楚时为空字符串","risks":["最多1条简短的主要问题，没有则空数组"]}]}。` },
+    { role: 'user', content: JSON.stringify({ items: items.map((item, index) => ({ index, description: item.name })) }) }], llm, 0.1, 12000);
+  return parseAiReview(result, items);
 }
 
 function parseItems(value: unknown): DraftItem[] {
@@ -133,18 +153,25 @@ export async function POST(request: Request) {
 
   const errors = checks.filter((item) => item.level === 'error').length;
   const warnings = checks.filter((item) => item.level === 'warning').length;
-  let aiReview: { available: boolean; model?: string; items: AiReviewItem[]; notice?: string } = { available: false, items: [], notice: '未配置模型或异常检查能力已关闭' };
-  const preferences = readAiPreferences(); const plan = preferences.abilities.reportReview ? getLlmRuntimePlan() : null;
+  const preferences = readAiPreferences();
+  const aiReviewEnabled = preferences.abilities.reportReview;
+  let aiReview: { enabled: boolean; available: boolean; model?: string; items: AiReviewItem[]; notice?: string } = {
+    enabled: aiReviewEnabled,
+    available: false,
+    items: [],
+    notice: aiReviewEnabled ? '未配置可用的大模型' : undefined,
+  };
+  const plan = aiReviewEnabled ? getLlmRuntimePlan() : null;
   if (plan && items.length > 0) {
     let active = plan.primary; let fallbackUsed = false; const startedAt = Date.now();
     try {
       let reviewItems: AiReviewItem[];
-      try { reviewItems = await reviewWithAi(projectId, system, date, items, active); }
-      catch (primaryError) { if (!plan.fallback) throw primaryError; active = plan.fallback; fallbackUsed = true; reviewItems = await reviewWithAi(projectId, system, date, items, active); }
-      aiReview = { available: true, model: active.profileName || active.model, items: reviewItems, notice: reviewItems.length ? undefined : 'AI未发现需要补充的文字问题' };
+      try { reviewItems = await reviewWithAi(items, active); }
+      catch (primaryError) { if (!plan.fallback) throw primaryError; active = plan.fallback; fallbackUsed = true; reviewItems = await reviewWithAi(items, active); }
+      aiReview = { enabled: true, available: true, model: active.profileName || active.model, items: reviewItems, notice: reviewItems.length ? undefined : 'AI未发现需要补充的文字问题' };
       recordAiUsage({ projectId, profileId: active.profileId, model: active.model, taskType: 'report_review', success: true, fallbackUsed, durationMs: Date.now() - startedAt });
     } catch (error) {
-      aiReview = { available: false, items: [], notice: 'AI语义检查暂时不可用，硬性规则检查不受影响' };
+      aiReview = { enabled: true, available: false, items: [], notice: 'AI语义检查暂时不可用，硬性规则检查不受影响' };
       recordAiUsage({ projectId, profileId: active.profileId, model: active.model, taskType: 'report_review', success: false, fallbackUsed, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : '检查失败' });
     }
   }

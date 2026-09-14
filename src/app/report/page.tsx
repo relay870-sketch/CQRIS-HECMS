@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/components/project-provider';
-import { AlertTriangle, Check, CircleCheck, CircleX, ImagePlus, Link2, MapPin, ShieldCheck, Users, Plus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, CircleCheck, CircleX, ImagePlus, Link2, MapPin, ShieldCheck, Users, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { normalizeMatchText, rankBomMatches } from '@/lib/bom-matcher';
 
@@ -55,6 +55,8 @@ interface EditableReport {
   workers: string;
   weather?: string | null;
   notes?: string | null;
+  tomorrow_plan?: string | null;
+  tomorrow_location?: string | null;
   photos: string;
 }
 
@@ -71,7 +73,7 @@ interface InspectionResult {
   checks: Array<{ level: 'error' | 'warning' | 'passed'; field: string; message: string; itemIndex?: number }>;
   summary: { passed: number; warnings: number; errors: number };
   source: { date: string; checkedAt: string; rules: string[] };
-  aiReview: { available: boolean; model?: string; notice?: string; items: Array<{ index: number; clarity: 'clear' | 'improve'; suggestedLocation: string; suggestedDescription: string; risks: string[] }> };
+  aiReview: { enabled: boolean; available: boolean; model?: string; notice?: string; items: Array<{ index: number; clarity: 'clear' | 'improve'; suggestedLocation: string; suggestedDescription: string; risks: string[] }> };
   error?: string;
 }
 
@@ -96,6 +98,11 @@ export default function ReportPage() {
   ]);
   const [weather, setWeather] = useState('晴');
   const [notes, setNotes] = useState('');
+  const [tomorrowPlan, setTomorrowPlan] = useState('');
+  const [tomorrowLocation, setTomorrowLocation] = useState('');
+  const [planEditorOpen, setPlanEditorOpen] = useState(false);
+  const [planDraft, setPlanDraft] = useState('');
+  const [planLocationDraft, setPlanLocationDraft] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [existingPhotos, setExistingPhotos] = useState<Photo[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
@@ -226,6 +233,8 @@ export default function ReportPage() {
           setWorkItems(drafts);
           setWeather(report.weather || '晴');
           setNotes(report.notes || '');
+          setTomorrowPlan(report.tomorrow_plan || '');
+          setTomorrowLocation(report.tomorrow_location || '');
           setExistingPhotos(parsedPhotos);
         }
 
@@ -460,6 +469,8 @@ export default function ReportPage() {
           weather: weather || null,
           issue: null,
           notes: notes.trim() || null,
+          tomorrowPlan: tomorrowPlan.trim() || null,
+          tomorrowLocation: tomorrowLocation.trim() || null,
           photos: [...existingPhotos, ...uploadedPhotos],
           submitter: '管理员',
         }),
@@ -869,6 +880,13 @@ export default function ReportPage() {
             />
           </section>
 
+          {/* 明日计划：默认只显示一行，避免拉长报工页 */}
+          <button type="button" onClick={() => { setPlanDraft(tomorrowPlan); setPlanLocationDraft(tomorrowLocation); setPlanEditorOpen(true); }}
+            className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3.5 text-left shadow-sm">
+            <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="text-[16px] font-semibold">明日计划</h2><span className="text-[12px] text-gray-400">选填</span></div><p className={`mt-0.5 truncate text-[12px] ${tomorrowPlan ? 'text-gray-500' : 'text-gray-400'}`}>{tomorrowPlan || '未填写'}{tomorrowPlan && tomorrowLocation ? ` · ${tomorrowLocation}` : ''}</p></div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-gray-300" />
+          </button>
+
           {/* 施工照片 */}
           <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <div className="mb-3">
@@ -928,6 +946,17 @@ export default function ReportPage() {
             </p>
           </section>
 
+          {planEditorOpen && <div className="fixed inset-0 z-[95] flex items-end justify-center bg-black/45 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setPlanEditorOpen(false); }}>
+            <section className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-2xl">
+              <div className="flex items-center justify-between"><div><h2 className="text-[18px] font-semibold">明日计划</h2><p className="mt-1 text-xs text-gray-400">仅作施工安排，不计入今日完成量</p></div><button type="button" onClick={() => setPlanEditorOpen(false)} className="rounded-lg p-2 text-gray-400"><X className="h-5 w-5" /></button></div>
+              <label className="mt-5 block text-[13px] font-medium text-gray-600">计划施工内容</label>
+              <textarea value={planDraft} onChange={(event) => setPlanDraft(event.target.value)} rows={4} maxLength={500} placeholder="例如：安装摄像机立柱、敷设通信光缆……" className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-[#F8F9FB] px-3.5 py-3 text-[14px] leading-6 placeholder:text-gray-300 focus:border-[#1E5AA8] focus:outline-none" />
+              <label className="mt-4 block text-[13px] font-medium text-gray-600">计划位置 <span className="font-normal text-gray-400">选填</span></label>
+              <input value={planLocationDraft} onChange={(event) => setPlanLocationDraft(event.target.value)} maxLength={200} placeholder="例如：XX收费站、K32+922" className="mt-2 w-full rounded-xl border border-gray-200 bg-[#F8F9FB] px-3.5 py-3 text-[14px] placeholder:text-gray-300 focus:border-[#1E5AA8] focus:outline-none" />
+              <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setPlanEditorOpen(false)} className="rounded-xl border px-4 py-2.5 text-sm text-gray-600">取消</button><button type="button" onClick={() => { const content = planDraft.trim(); setTomorrowPlan(content); setTomorrowLocation(content ? planLocationDraft.trim() : ''); setPlanEditorOpen(false); }} className="rounded-xl bg-[#1E5AA8] px-5 py-2.5 text-sm font-medium text-white">保存</button></div>
+            </section>
+          </div>}
+
           {/* 提交 */}
           <button
             type="button"
@@ -945,7 +974,7 @@ export default function ReportPage() {
             <section className="max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-xl sm:rounded-2xl">
               <div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><div className={`rounded-xl p-2.5 ${inspection.summary.errors ? 'bg-red-50 text-red-600' : inspection.summary.warnings ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>{inspection.summary.errors ? <CircleX className="h-5 w-5"/> : inspection.summary.warnings ? <AlertTriangle className="h-5 w-5"/> : <ShieldCheck className="h-5 w-5"/>}</div><div><h2 className="text-[17px] font-semibold">本次填报检查</h2><p className="mt-1 text-xs text-gray-400">{inspection.summary.passed} 项通过 · {inspection.summary.warnings} 项提醒 · {inspection.summary.errors} 项错误</p></div></div><button type="button" onClick={() => setInspectionOpen(false)} className="rounded-lg p-2 text-gray-400"><X className="h-5 w-5"/></button></div>
               <div className="mt-4 space-y-2">{inspection.checks.filter((item) => item.level !== 'passed').map((item, index) => <div key={`${item.field}-${index}`} className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm ${item.level === 'error' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{item.level === 'error' ? <CircleX className="mt-0.5 h-4 w-4 shrink-0"/> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/>}<div><span className="font-medium">{item.field}</span><p className="mt-0.5 leading-5">{item.message}</p></div></div>)}{inspection.summary.errors === 0 && inspection.summary.warnings === 0 && <div className="flex items-center gap-2 rounded-xl bg-green-50 px-3 py-3 text-sm text-green-700"><CircleCheck className="h-4 w-4"/>日期、系统、位置、施工内容、数量、单位及清单工程量检查均已通过。</div>}</div>
-              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3"><div className="flex items-center justify-between gap-2"><h3 className="flex items-center gap-1.5 text-sm font-semibold text-[#1E5AA8]"><ShieldCheck className="h-4 w-4"/>AI提示与建议</h3>{inspection.aiReview.model && <span className="text-[10px] text-gray-400">{inspection.aiReview.model}</span>}</div>{inspection.aiReview.items.length ? <div className="mt-2 space-y-2">{inspection.aiReview.items.map((review) => <div key={review.index} className="rounded-lg bg-white p-2.5 text-xs text-gray-600"><p className="font-medium text-gray-700">第{review.index + 1}项 · {review.clarity === 'clear' ? '描述清楚' : '建议补充'}</p>{review.suggestedLocation && <div className="mt-1.5"><span className="text-gray-400">位置建议：</span>{review.suggestedLocation}</div>}{review.suggestedDescription && <div className="mt-1.5"><span className="text-gray-400">内容建议：</span>{review.suggestedDescription}</div>}{review.risks.length > 0 && <div className="mt-1.5"><span className="text-gray-400">提示：</span>{review.risks.join('；')}</div>}{(review.suggestedLocation || review.suggestedDescription) && <button type="button" onClick={() => { const target = workItems.filter((item) => item.name.trim())[review.index]; if (!target) return; updateWorkItem(target.key, { ...(review.suggestedLocation ? { location: review.suggestedLocation } : {}), ...(review.suggestedDescription ? { name: review.suggestedDescription, code: undefined, bomItemId: null } : {}) }); setInspectionOpen(false); toast.success('已填入AI建议，请补全空白并重新检查'); }} className="mt-2 rounded-md bg-[#E8F0FE] px-2 py-1 text-[#1E5AA8]">采用建议并修改</button>}</div>)}</div> : <p className="mt-2 text-xs leading-5 text-gray-500">{inspection.aiReview.notice || 'AI未发现需要补充的文字问题'}</p>}<p className="mt-2 text-[10px] leading-4 text-gray-400">AI建议不参与合同数量计算，也不会自动修改原始填报。</p></div>
+              {inspection.aiReview.enabled && <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3"><div className="flex items-center justify-between gap-2"><h3 className="flex items-center gap-1.5 text-sm font-semibold text-[#1E5AA8]"><ShieldCheck className="h-4 w-4"/>AI提示与建议</h3>{inspection.aiReview.model && <span className="text-[10px] text-gray-400">{inspection.aiReview.model}</span>}</div>{inspection.aiReview.items.length ? <div className="mt-2 space-y-2">{inspection.aiReview.items.map((review) => <div key={review.index} className="rounded-lg bg-white p-2.5 text-xs text-gray-600"><p className="font-medium text-gray-700">第{review.index + 1}项 · 内容建议</p>{review.suggestedDescription && <div className="mt-1.5">{review.suggestedDescription}</div>}{review.risks.length > 0 && <div className="mt-1.5 text-gray-500">{review.risks.join('；')}</div>}{review.suggestedDescription && <button type="button" onClick={() => { const target = workItems.filter((item) => item.name.trim())[review.index]; if (!target) return; updateWorkItem(target.key, { name: review.suggestedDescription, code: undefined, bomItemId: null }); setInspectionOpen(false); toast.success('已填入AI建议，请确认后重新检查'); }} className="mt-2 rounded-md bg-[#E8F0FE] px-2 py-1 text-[#1E5AA8]">采用建议并修改</button>}</div>)}</div> : <p className="mt-2 text-xs leading-5 text-gray-500">{inspection.aiReview.notice || '施工内容表达清楚，无需调整'}</p>}<p className="mt-2 text-[10px] leading-4 text-gray-400">AI只判断施工内容是否容易看懂，不审查数量、单位和位置。</p></div>}
               <details className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500"><summary className="cursor-pointer font-medium">本次检查依据</summary><p className="mt-2 leading-5">项目：{currentProject.name}<br/>施工日期：{inspection.source.date}<br/>检查规则：{inspection.source.rules.join('、')}<br/>检查时间：{new Date(inspection.source.checkedAt).toLocaleString('zh-CN')}</p></details>
               <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setInspectionOpen(false)} className="rounded-xl border px-4 py-2.5 text-sm text-gray-600">返回修改</button>{inspection.canSubmit && <button type="button" onClick={() => { setInspectionOpen(false); void handleSubmit(true); }} className="rounded-xl bg-[#1E5AA8] px-4 py-2.5 text-sm font-medium text-white">{inspection.summary.warnings ? '确认无误并提交' : '提交报工'}</button>}</div>
             </section>

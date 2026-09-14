@@ -17,6 +17,8 @@ interface Report {
   workers: string;
   issue: string | null;
   notes: string | null;
+  tomorrow_plan?: string | null;
+  tomorrow_location?: string | null;
   work_items?: string | null;
 }
 
@@ -130,6 +132,7 @@ export default function HomePage() {
     ? todayAttendance.reduce((sum, row) => sum + row.overtime_hours, 0)
     : fallbackOvertimePersonHours;
   const todayNotes = todayReports.filter((report) => report.issue?.trim() || report.notes?.trim());
+  const tomorrowPlans = todayReports.filter((report) => report.tomorrow_plan?.trim());
   const hasAttention = todayExternalCount > 0 || todayOvertimePersonHours > 0 || todayNotes.length > 0;
 
   const weeklyAttendance: Array<{ date: string; 出勤人数: number }> = [];
@@ -224,6 +227,13 @@ export default function HomePage() {
             <Link href="/report" className="flex items-center justify-between rounded-xl border border-dashed border-[#BCD0EB] bg-[#F5F9FF] p-3.5 text-sm text-[#1E5AA8]"><span>今日尚未报工，立即填写</span><ChevronRight className="h-4 w-4" /></Link>
           )}
         </section>
+
+        {tomorrowPlans.length > 0 && (
+          <section className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-[#1E5AA8]" /><div><h2 className="text-[15px] font-semibold">明日计划</h2><p className="mt-0.5 text-xs text-gray-400">来自今日报工安排</p></div></div>
+            <div className="space-y-2">{tomorrowPlans.map((report) => <div key={report.id} className="rounded-xl bg-[#F5F9FF] px-3 py-2.5"><div className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-700">{report.tomorrow_plan}</div>{report.tomorrow_location && <div className="mt-1 flex items-start gap-1 text-xs text-gray-500"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0"/><span className="break-all">{report.tomorrow_location}</span></div>}</div>)}</div>
+          </section>
+        )}
 
         {hasAttention && (
           <section className="rounded-2xl border border-[#F5D7B5] bg-[#FFF9F2] p-4 shadow-sm">

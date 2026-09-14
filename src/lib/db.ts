@@ -105,6 +105,13 @@ function migrateSchema(db: Database.Database): void {
     db.exec('ALTER TABLE reports ADD COLUMN system TEXT');
   }
 
+  if (!reportCols2.some(c => c.name === 'tomorrow_plan')) {
+    db.exec('ALTER TABLE reports ADD COLUMN tomorrow_plan TEXT');
+  }
+  if (!reportCols2.some(c => c.name === 'tomorrow_location')) {
+    db.exec('ALTER TABLE reports ADD COLUMN tomorrow_location TEXT');
+  }
+
   // 首次为项目创建默认子系统，并把现有清单归属到默认系统
   const sysCount = db.prepare('SELECT COUNT(*) c FROM project_systems').get() as { c: number };
   if (sysCount.c === 0) {
@@ -309,6 +316,8 @@ function initSchema(db: Database.Database): void {
       quality_checks TEXT NOT NULL, -- JSON array of checked items
       photos TEXT NOT NULL, -- JSON array of photo objects
       notes TEXT,
+      tomorrow_plan TEXT,
+      tomorrow_location TEXT,
       submitter TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,

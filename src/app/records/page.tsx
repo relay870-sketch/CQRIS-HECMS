@@ -23,6 +23,8 @@ interface Report {
   quality_checks: string;
   photos: string;
   notes: string | null;
+  tomorrow_plan?: string | null;
+  tomorrow_location?: string | null;
   submitter: string;
   work_items?: string | null;
   system?: string | null;
@@ -304,7 +306,7 @@ export default function RecordsPage() {
         workers: reportWorkerIds,
       }];
 
-      return items.map((item) => {
+      return items.map((item, itemIndex) => {
         const workerIds = item.workers && item.workers.length > 0 ? item.workers : reportWorkerIds;
         return {
           '日期': report.date,
@@ -317,13 +319,15 @@ export default function RecordsPage() {
           '参与人员': workerIds.map(getWorkerName).join('、'),
           '天气': report.weather || '',
           '现场说明': report.notes || '',
+          '明日计划': itemIndex === 0 ? report.tomorrow_plan || '' : '',
+          '计划位置': itemIndex === 0 ? report.tomorrow_location || '' : '',
           '提交人': getSubmitterName(report.submitter),
         };
       });
     });
     const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [
-      { wch: 12 }, { wch: 12 }, { wch: 28 }, { wch: 10 }, { wch: 8 }, { wch: 28 }, { wch: 16 }, { wch: 32 }, { wch: 10 }, { wch: 28 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 28 }, { wch: 10 }, { wch: 8 }, { wch: 28 }, { wch: 16 }, { wch: 32 }, { wch: 10 }, { wch: 28 }, { wch: 30 }, { wch: 24 }, { wch: 12 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '施工记录');
@@ -427,7 +431,7 @@ export default function RecordsPage() {
   return (
     <div className="min-h-screen bg-[#F5F6F8] pb-6">
       {/* Filters */}
-      <div className="bg-white px-4 py-3 border-b border-gray-100 space-y-3">
+      <div className="space-y-3 border-b border-gray-100 bg-white px-4 py-3 md:grid md:grid-cols-[minmax(360px,1fr)_240px_auto] md:items-center md:gap-3 md:space-y-0 md:px-6">
         {/* 关键词搜索（桩号/施工内容/人员） */}
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0 relative">
@@ -478,7 +482,7 @@ export default function RecordsPage() {
             重置
           </button>
         </div>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 md:justify-end">
           <div className="flex gap-2">
             <button
               onClick={() => setViewMode('list')}
@@ -507,16 +511,16 @@ export default function RecordsPage() {
       </div>
 
       {/* Records */}
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 md:px-6 md:py-5">
         {viewMode === 'list' ? (
           <>
-          <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block"><div className="overflow-x-auto"><table className="w-full min-w-[1180px] table-fixed text-left text-sm">
+          <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block"><div className="overflow-x-auto"><table className="w-full min-w-[1280px] table-fixed text-left text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500"><tr><th className="w-28 px-4 py-3">日期</th><th className="w-28 px-3 py-3">系统</th><th className="w-[420px] px-3 py-3">施工明细（内容 / 数量 / 位置）</th><th className="w-72 px-3 py-3">参与人员 / 考勤</th><th className="w-20 px-3 py-3">天气</th><th className="w-24 px-3 py-3">提交人</th><th className="w-36 px-4 py-3 text-right">操作</th></tr></thead>
             <tbody className="divide-y divide-gray-100">{filteredReports.map((report) => {
               const workerIds = parseStringArray(report.workers); const workItems = parseWorkItems(report.work_items); const photos = parsePhotos(report.photos); const open = expandedId === report.id; const attendanceDetails = getAttendanceDetails(report);
               const detailItems = workItems.length > 0 ? workItems : [{ name: report.work_type, quantity: report.quantity, unit: report.unit, location: report.location }];
               return <Fragment key={report.id}><tr className="hover:bg-blue-50/30"><td className="whitespace-nowrap px-4 py-3 align-top font-medium text-gray-900">{report.date}</td><td className="px-3 py-3 align-top"><span className="rounded bg-[#E8F0FE] px-2 py-1 text-xs text-[#1E5AA8]">{report.system || workTypeMap[report.work_type] || report.work_type}</span></td><td className="px-3 py-3 align-top"><div className="space-y-2">{detailItems.map((item, index) => <div key={`${item.name}-${item.location || ''}-${index}`} className="rounded-lg border border-gray-100 bg-white px-3 py-2"><div className="break-words font-medium leading-5 text-gray-800">{item.name} <span className="whitespace-nowrap text-[#1E5AA8]">{item.quantity}{item.unit}</span></div><div className="mt-1 flex items-start gap-1 text-xs leading-5 text-gray-500"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" /><span className="break-all">{item.location || '未填写施工位置'}</span></div></div>)}</div></td><td className="px-3 py-3 align-top"><div className="space-y-2">{attendanceDetails.map((detail, index) => <div key={`${detail.name}-${index}`} className="rounded-lg bg-gray-50 px-2.5 py-2"><div className="break-words text-xs font-medium leading-5 text-gray-700">{detail.workerNames}</div><div className="mt-1 flex flex-wrap items-center gap-1"><span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${detail.attendanceLabel === '全天' ? 'bg-green-100 text-green-700' : detail.attendanceLabel === '半天' ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-600'}`}>{detail.attendanceLabel}</span>{detail.overtimeHours > 0 && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[11px] font-medium text-orange-700">加班 {detail.overtimeHours}小时</span>}{attendanceDetails.length > 1 && <span className="truncate text-[11px] text-gray-400" title={detail.name}>{detail.name}</span>}</div></div>)}</div></td><td className="px-3 py-3 align-top text-gray-600">{report.weather || '—'}</td><td className="px-3 py-3 align-top text-gray-600">{getSubmitterName(report.submitter)}</td><td className="px-4 py-3 align-top"><div className="flex justify-end gap-1"><button onClick={() => setExpandedId(open ? null : report.id)} className="rounded-lg px-2 py-1.5 text-xs text-[#1E5AA8] hover:bg-blue-50">{open ? '收起' : '详情'}</button><button onClick={() => window.location.assign(`/report?edit=${encodeURIComponent(report.id)}`)} className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-[#1E5AA8]" aria-label="修改记录"><Pencil className="h-4 w-4" /></button><button onClick={() => handleDeleteReport(report.id)} className="rounded-lg px-2 py-1.5 text-xs text-red-500 hover:bg-red-50">删除</button></div></td></tr>
-                {open && <tr><td colSpan={7} className="bg-gray-50 px-6 py-4"><div className="grid gap-4 lg:grid-cols-[1fr_280px]"><div><div className="text-xs font-medium text-gray-400">参与人员</div><div className="mt-1 text-sm text-gray-700">{workerIds.length > 0 ? workerIds.map(getWorkerName).join('、') : '未关联人员'}</div>{report.notes && <><div className="mt-3 text-xs font-medium text-gray-400">现场说明</div><div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{report.notes}</div></>}<div className="mt-3 text-xs text-gray-400">上传时间：{formatSubmittedAt(report.created_at)}</div></div><div><div className="text-xs font-medium text-gray-400">现场照片（{photos.length}张）</div>{photos.length > 0 ? <div className="mt-2 grid grid-cols-4 gap-2">{photos.slice(0, 8).map((photo, index) => <button key={`${photo.url}-${index}`} type="button" onClick={() => setPreviewPhoto(photo)}>{/* eslint-disable-next-line @next/next/no-img-element */}<img src={photo.url} alt={photo.name || '现场照片'} className="aspect-square w-full rounded-lg object-cover" /></button>)}</div> : <div className="mt-2 text-sm text-gray-400">未上传照片</div>}</div></div></td></tr>}
+                {open && <tr><td colSpan={7} className="bg-[#F7F9FC] px-5 py-4"><div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_320px]"><section className="rounded-xl border border-gray-100 bg-white p-4"><div className="text-xs font-semibold text-gray-500">报工信息</div><dl className="mt-3 grid grid-cols-[72px_1fr] gap-x-3 gap-y-2 text-sm"><dt className="text-gray-400">提交人</dt><dd className="text-gray-700">{getSubmitterName(report.submitter)}</dd><dt className="text-gray-400">上传时间</dt><dd className="text-gray-700">{formatSubmittedAt(report.created_at)}</dd><dt className="text-gray-400">人员合计</dt><dd className="text-gray-700">{workerIds.length}人</dd></dl>{report.notes && <div className="mt-3 border-t border-gray-100 pt-3"><div className="text-xs text-gray-400">现场说明</div><div className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-gray-700">{report.notes}</div></div>}</section><section className={`rounded-xl border p-4 ${report.tomorrow_plan ? 'border-blue-100 bg-blue-50/60' : 'border-gray-100 bg-white'}`}><div className={`text-xs font-semibold ${report.tomorrow_plan ? 'text-[#1E5AA8]' : 'text-gray-500'}`}>明日计划</div>{report.tomorrow_plan ? <><div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-700">{report.tomorrow_plan}</div>{report.tomorrow_location && <div className="mt-2 flex items-start gap-1 text-xs text-gray-500"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0"/><span className="break-all">{report.tomorrow_location}</span></div>}</> : <div className="mt-3 text-sm text-gray-400">未填写明日计划</div>}</section><section className="rounded-xl border border-gray-100 bg-white p-4"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-gray-500">现场照片</span><span className="text-xs text-gray-400">{photos.length}张</span></div>{photos.length > 0 ? <div className="mt-3 grid grid-cols-5 gap-2">{photos.slice(0, 10).map((photo, index) => <button key={`${photo.url}-${index}`} type="button" onClick={() => setPreviewPhoto(photo)} className="overflow-hidden rounded-lg">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={photo.url} alt={photo.name || '现场照片'} className="aspect-square w-full object-cover transition hover:scale-105" /></button>)}</div> : <div className="mt-3 text-sm text-gray-400">未上传照片</div>}</section></div></td></tr>}
               </Fragment>;
             })}</tbody>
           </table></div></div>
@@ -666,6 +670,13 @@ export default function RecordsPage() {
                         <div className="mt-2 p-2 bg-[#F5F6F8] rounded-lg">
                           <div className="text-xs text-gray-400 mb-0.5">备注:</div>
                           <div className="text-sm text-gray-600 break-words">{report.notes}</div>
+                        </div>
+                      )}
+                      {report.tomorrow_plan && (
+                        <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50/60 p-2.5">
+                          <div className="mb-0.5 text-xs font-medium text-[#1E5AA8]">明日计划</div>
+                          <div className="whitespace-pre-wrap break-words text-sm text-gray-700">{report.tomorrow_plan}</div>
+                          {report.tomorrow_location && <div className="mt-1 break-words text-xs text-gray-500">计划位置：{report.tomorrow_location}</div>}
                         </div>
                       )}
                       <div className="mt-3 rounded-lg border border-gray-100 px-3 py-2 text-xs leading-5 text-gray-400 break-words">
